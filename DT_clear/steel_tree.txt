@@ -1,0 +1,16 @@
+if f32 <= 1023
+  if f29 <= 1023
+    if f28 <= 1023
+      if f27 <= 1023
+        if f30 <= 1023
+          leaf = 1
+        else
+          leaf = 0
+      else
+        leaf = 0
+    else
+      leaf = 0
+  else
+    leaf = 0
+else
+  leaf = 0

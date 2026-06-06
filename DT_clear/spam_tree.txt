@@ -1,0 +1,172 @@
+if f52 <= 15
+  if f6 <= 18
+    if f51 <= 28
+      if f15 <= 20
+        if f22 <= 129
+          if f54 <= 12
+            if f24 <= 2
+              if f16 <= 27
+                if f55 <= 2
+                  if f7 <= 99
+                    leaf = 0
+                  else
+                    leaf = 0
+                else
+                  if f35 <= 139
+                    if f4 <= 145
+                      if f5 <= 285
+                        if f27 <= 58
+                          if f9 <= 382
+                            if f19 <= 27
+                              if f0 <= 974
+                                leaf = 0
+                              else
+                                leaf = 1
+                            else
+                              leaf = 1
+                          else
+                            leaf = 1
+                        else
+                          if f55 <= 4
+                            leaf = 0
+                          else
+                            leaf = 1
+                      else
+                        leaf = 1
+                    else
+                      if f11 <= 104
+                        leaf = 1
+                      else
+                        leaf = 0
+                  else
+                    leaf = 1
+              else
+                if f51 <= 5
+                  if f20 <= 227
+                    if f37 <= 17
+                      leaf = 0
+                    else
+                      leaf = 1
+                  else
+                    leaf = 1
+                else
+                  leaf = 1
+            else
+              if f10 <= 886
+                leaf = 0
+              else
+                leaf = 1
+          else
+            if f49 <= 26
+              if f24 <= 12
+                leaf = 1
+              else
+                leaf = 0
+            else
+              leaf = 0
+        else
+          if f49 <= 16
+            leaf = 1
+          else
+            leaf = 0
+      else
+        if f26 <= 7
+          if f4 <= 129
+            if f51 <= 12
+              if f15 <= 394
+                if f56 <= 69
+                  leaf = 0
+                else
+                  if f49 <= 28
+                    leaf = 1
+                  else
+                    leaf = 0
+              else
+                leaf = 1
+            else
+              if f51 <= 26
+                if f9 <= 138
+                  if f56 <= 14
+                    leaf = 0
+                  else
+                    leaf = 1
+                else
+                  leaf = 0
+              else
+                leaf = 0
+          else
+            if f20 <= 83
+              leaf = 0
+            else
+              leaf = 1
+        else
+          leaf = 0
+    else
+      if f56 <= 10
+        if f15 <= 100
+          if f18 <= 447
+            if f16 <= 112
+              if f51 <= 211
+                leaf = 0
+              else
+                leaf = 1
+            else
+              leaf = 1
+          else
+            if f54 <= 0
+              leaf = 0
+            else
+              leaf = 1
+        else
+          leaf = 1
+      else
+        if f38 <= 35
+          if f24 <= 22
+            if f51 <= 282
+              leaf = 1
+            else
+              leaf = 0
+          else
+            leaf = 0
+        else
+          leaf = 0
+  else
+    if f26 <= 9
+      leaf = 1
+    else
+      leaf = 0
+else
+  if f24 <= 37
+    if f45 <= 17
+      if f55 <= 1
+        if f6 <= 56
+          if f15 <= 52
+            leaf = 0
+          else
+            leaf = 1
+        else
+          leaf = 1
+      else
+        if f26 <= 13
+          if f25 <= 23
+            if f47 <= 107
+              leaf = 1
+            else
+              leaf = 0
+          else
+            leaf = 0
+        else
+          leaf = 0
+    else
+      if f54 <= 10
+        if f48 <= 71
+          leaf = 0
+        else
+          leaf = 1
+      else
+        leaf = 1
+  else
+    if f6 <= 21
+      leaf = 0
+    else
+      leaf = 1

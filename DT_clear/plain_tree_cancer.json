@@ -1,0 +1,255 @@
+{
+  "tree_height": 4,
+  "labels_count": 2,
+  "features_count": 2,
+  "nodes": [
+    {
+      "index": 0,
+      "type": "node",
+      "feature": 27,
+      "theta": -6.73219e-13,
+      "left": 1,
+      "right": 2
+    },
+    {
+      "index": 1,
+      "type": "node",
+      "feature": 19,
+      "theta": 1.56081e-12,
+      "left": 3,
+      "right": 4
+    },
+    {
+      "index": 2,
+      "type": "node",
+      "feature": 26,
+      "theta": 5.484e-12,
+      "left": 5,
+      "right": 6
+    },
+    {
+      "index": 3,
+      "type": "node",
+      "feature": 26,
+      "theta": 9.90759e-14,
+      "left": 7,
+      "right": 8
+    },
+    {
+      "index": 4,
+      "type": "node",
+      "feature": 22,
+      "theta": 2.11298e-13,
+      "left": 9,
+      "right": 10
+    },
+    {
+      "index": 5,
+      "type": "node",
+      "feature": 6,
+      "theta": -0.5,
+      "left": 11,
+      "right": 12
+    },
+    {
+      "index": 6,
+      "type": "node",
+      "feature": 19,
+      "theta": -1.61858e-13,
+      "left": 13,
+      "right": 14
+    },
+    {
+      "index": 7,
+      "type": "node",
+      "feature": 20,
+      "theta": -2.82586e-14,
+      "left": 15,
+      "right": 16
+    },
+    {
+      "index": 8,
+      "type": "node",
+      "feature": 7,
+      "theta": 2.09048e-12,
+      "left": 17,
+      "right": 18
+    },
+    {
+      "index": 9,
+      "type": "node",
+      "feature": 6,
+      "theta": -0.5,
+      "left": 19,
+      "right": 20
+    },
+    {
+      "index": 10,
+      "type": "node",
+      "feature": 0,
+      "theta": -1.0,
+      "left": 21,
+      "right": 22
+    },
+    {
+      "index": 11,
+      "type": "node",
+      "feature": 19,
+      "theta": -4.15229e-12,
+      "left": 23,
+      "right": 24
+    },
+    {
+      "index": 12,
+      "type": "node",
+      "feature": 19,
+      "theta": 8.63439e-13,
+      "left": 25,
+      "right": 26
+    },
+    {
+      "index": 13,
+      "type": "node",
+      "feature": 27,
+      "theta": 5.07639e-13,
+      "left": 27,
+      "right": 28
+    },
+    {
+      "index": 14,
+      "type": "node",
+      "feature": 0,
+      "theta": -1.0,
+      "left": 29,
+      "right": 30
+    },
+    {
+      "index": 15,
+      "type": "leaf",
+      "values": [
+        12.1812,
+        187.648
+      ]
+    },
+    {
+      "index": 16,
+      "type": "leaf",
+      "values": [
+        3.26862,
+        3.61943
+      ]
+    },
+    {
+      "index": 17,
+      "type": "leaf",
+      "values": [
+        9.915,
+        15.6594
+      ]
+    },
+    {
+      "index": 18,
+      "type": "leaf",
+      "values": [
+        3.02007,
+        0.454673
+      ]
+    },
+    {
+      "index": 19,
+      "type": "leaf",
+      "values": [
+        2.20688,
+        3.02936
+      ]
+    },
+    {
+      "index": 20,
+      "type": "leaf",
+      "values": [
+        5.45038,
+        1.40959
+      ]
+    },
+    {
+      "index": 21,
+      "type": "leaf",
+      "values": [
+        0.0102416,
+        -0.000311187
+      ]
+    },
+    {
+      "index": 22,
+      "type": "leaf",
+      "values": [
+        6.06716,
+        0.415883
+      ]
+    },
+    {
+      "index": 23,
+      "type": "leaf",
+      "values": [
+        3.78256,
+        10.0208
+      ]
+    },
+    {
+      "index": 24,
+      "type": "leaf",
+      "values": [
+        1.49116,
+        0.460628
+      ]
+    },
+    {
+      "index": 25,
+      "type": "leaf",
+      "values": [
+        9.15252,
+        6.09331
+      ]
+    },
+    {
+      "index": 26,
+      "type": "leaf",
+      "values": [
+        6.43066,
+        0.325267
+      ]
+    },
+    {
+      "index": 27,
+      "type": "leaf",
+      "values": [
+        7.64238,
+        4.0328
+      ]
+    },
+    {
+      "index": 28,
+      "type": "leaf",
+      "values": [
+        34.1466,
+        2.45814
+      ]
+    },
+    {
+      "index": 29,
+      "type": "leaf",
+      "values": [
+        0.0227147,
+        -0.003927
+      ]
+    },
+    {
+      "index": 30,
+      "type": "leaf",
+      "values": [
+        40.2117,
+        0.376968
+      ]
+    }
+  ]
+}

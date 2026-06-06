@@ -1,0 +1,33 @@
+{
+  "internal": {
+    "feature": 0,
+    "threshold": 10,
+    "op": "leq",
+    "left": {
+      "internal": {
+        "feature": 1,
+        "threshold": 5,
+        "op": "leq",
+        "left": {
+          "leaf": 0
+        },
+        "right": {
+          "leaf": 1
+        }
+      }
+    },
+    "right": {
+      "internal": {
+        "feature": 2,
+        "threshold": 7,
+        "op": "gt",
+        "left": {
+          "leaf": 2
+        },
+        "right": {
+          "leaf": 3
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,892 @@
+\documentclass[runningheads]{llncs}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\begin{document}
+
+\title{Privacy-Preserving Decision Tree Inference under CKKS:\\A Precision Impact Analysis}
+
+\titlerunning{CKKS Decision Tree Inference: Precision Impact}
+
+\author{Madicke-Diadji Mbodj\inst{1}}
+
+\authorrunning{M.-D. Mbodj}
+
+\institute{[Institution Name]\\
+\email{diazlinkk@gmail.com}}
+
+\maketitle
+
+%% =========================================================
+\begin{abstract}
+Privacy-preserving machine learning inference via Fully Homomorphic
+Encryption (FHE) allows a server to classify encrypted client data without
+ever accessing plaintext.  Decision trees are attractive inference models
+for this setting owing to their simplicity and interpretability, yet their
+discontinuous branching structure is fundamentally at odds with the smooth
+arithmetic required by modern FHE schemes.  We present a complete
+implementation of private decision tree inference combining the HBDT-SumPath
+constant-depth algorithm with an \emph{adaptive} polynomial approximation of
+the step function, where each internal tree node is assigned a polynomial
+degree proportional to the difficulty of its splitting decision -- quantified
+by the \emph{minimum feature gap} observed on training data.  Our central
+contribution is a systematic analysis of the two independent sources of
+accuracy loss that arise in this pipeline: (i) approximation error due to
+smooth replacement of the step function, and (ii) residual noise introduced
+by the CKKS homomorphic encryption scheme.  We evaluate on seven benchmark
+datasets, quantify the relationship between minimum gap and observed accuracy
+degradation, and identify when each source dominates.  On several datasets,
+the final adaptive HE pipeline matches the adaptive cleartext baseline
+exactly; on harder cases, a substantial part of the loss is due to
+\emph{unnormalised comparison logits} rather than CKKS itself.  After
+introducing node-wise logit normalisation, the adaptive pipeline recovers
+the hard-tree accuracy on Breast, Heart, and Steel in both cleartext and
+CKKS.  In the latest runs, the main residual CKKS-only loss remains on
+Cancer, where the small feature gap still induces a $3.1$-point drop
+between adaptive cleartext and adaptive HE.  Relative to the historical
+Akavia-style SEAL baseline visible in our local benchmark plots, our
+implementation is also markedly faster on the overlapping standard
+datasets.  All experiments use Microsoft SEAL v4.1.2 at the 128-bit
+security level.
+\end{abstract}
+
+\keywords{Homomorphic Encryption \and CKKS \and Decision Tree \and
+Privacy-Preserving Inference \and Polynomial Approximation \and
+Data Privacy}
+
+%% =========================================================
+\section{Introduction}
+\label{sec:intro}
+
+The widespread deployment of machine learning models as a service raises a
+fundamental tension between utility and privacy.  A client wishing to obtain
+a classification result must either reveal its sensitive input to the server,
+or perform inference locally -- requiring possession of the model.
+\emph{Private inference} dissolves this dilemma: the client encrypts its
+data, the server evaluates the model directly on ciphertext, and the client
+decrypts the result.  Neither party learns the other's secret.
+
+Decision trees occupy a privileged position in privacy-preserving machine
+learning (PPML) owing to their compactness, interpretability, and widespread
+deployment in regulated domains such as healthcare, credit scoring, and
+intrusion detection~\cite{bos2014private,tai2017mining}.  A depth-$D$ tree
+can be represented in $\mathcal{O}(2^D)$ internal nodes, each performing a
+scalar comparison $x[\mathit{feat}] \leq \theta$.  Under FHE, however,
+comparison is not a native operation: it must be approximated by a smooth
+polynomial, since every FHE scheme over the integers or reals supports only
+addition and multiplication.
+
+Among current FHE schemes, \textbf{CKKS}~\cite{cheon2017homomorphic}
+(Cheon-Kim-Kim-Song) is the scheme of choice for real-valued inference.
+CKKS encodes vectors of floating-point numbers in ciphertext slots and
+supports batched SIMD arithmetic, but introduces a controlled \emph{noise}
+after each multiplication.  This noise is bounded and manageable -- yet when
+the polynomial approximation of the comparison function evaluates near its
+transition region (i.e., when the true input is close to the threshold
+$\theta$), even a small CKKS noise perturbation can flip the effective
+branch decision and thus degrade classification accuracy.
+
+\textbf{Contributions.}  This paper makes the following contributions:
+\begin{enumerate}
+  \item We implement a complete private decision tree inference system
+        combining the HBDT-SumPath depth-reduction
+        algorithm~\cite{shin2022privacy} with per-node adaptive polynomial
+        approximation, using Microsoft SEAL v4.1.2.
+  \item We introduce and validate the \emph{minimum feature gap}
+        (\textit{min\_gap}) as an interpretable metric that predicts the
+        sensitivity of a given tree and dataset to both sources of accuracy
+        loss.
+  \item We show that for several pre-trained benchmark trees, local
+        \emph{node-wise logit normalisation} is necessary for the adaptive
+        approximation to reflect the true decision difficulty of each node.
+  \item We provide the \textbf{first systematic disentanglement} of
+        approximation error (visible in cleartext soft evaluation) from CKKS
+        noise error (the additional degradation in HE evaluation), across
+        seven benchmark datasets.
+  \item We characterise three precision regimes as a function of
+        \textit{min\_gap} and provide concrete parameter recommendations to
+        mitigate accuracy loss in each regime.
+\end{enumerate}
+
+The remainder of the paper is organised as follows.
+Section~\ref{sec:background} reviews CKKS, decision trees, and the
+SumPath algorithm.  Section~\ref{sec:system} describes the system
+architecture.  Section~\ref{sec:precision} develops the precision analysis.
+Section~\ref{sec:experiments} reports experimental results.
+Section~\ref{sec:related} discusses related work, and
+Section~\ref{sec:conclusion} concludes.
+
+%% =========================================================
+\section{Background}
+\label{sec:background}
+
+\subsection{CKKS Homomorphic Encryption}
+
+CKKS~\cite{cheon2017homomorphic} is a levelled FHE scheme over the ring
+$\mathbb{Z}[X]/(X^N+1)$ that encodes a vector of $N/2$ complex (or real)
+values into a single polynomial ciphertext.  Arithmetic over ciphertext
+closely mimics floating-point arithmetic: additions are exact and
+multiplications introduce a rounding error of magnitude
+$\varepsilon_{\mathrm{mult}} \approx \Delta^{-1}$ per level, where $\Delta$
+is the \emph{scale} factor chosen at key generation.
+
+In Microsoft SEAL~\cite{chen2020simple}, the scheme is parameterised by:
+\begin{itemize}
+  \item $N$ -- the polynomial modulus degree (power of 2); we use
+        $N = 2^{14} = 16{,}384$, giving $N/2 = 8{,}192$ SIMD slots;
+  \item $\Delta = 2^{40}$ -- the encoding scale, providing approximately
+        12 decimal digits of precision per ciphertext level;
+  \item $L$ -- the multiplicative depth budget (number of available levels
+        before the ciphertext noise floor becomes too large for correct
+        decryption); we configure $L = 12$.
+\end{itemize}
+
+After a sequence of $\ell$ multiplications the accumulated noise satisfies:
+\begin{equation}
+  \varepsilon_{\ell} \;\approx\; \ell \cdot N^{1/2} \cdot \Delta^{-1}
+  \;\approx\; \ell \cdot 10^{-7},
+  \label{eq:ckks_noise}
+\end{equation}
+with $N = 2^{14}$ and $\Delta = 2^{40}$.  Concretely, for a depth-6
+evaluation $\ell = 6$, Eq.~\eqref{eq:ckks_noise} gives
+$\varepsilon_6 \approx 6 \times 10^{-7}$, well below a gap threshold of
+$\delta = 0.05$ in typical settings.  The bound tightens, however, when
+polynomial evaluation itself occupies most of the depth budget and the
+residual noise after evaluation approaches the minimum feature gap.
+
+\subsection{Decision Tree Inference}
+
+A binary decision tree of depth $D$ over $d$ features partitions the input
+space $\mathbb{R}^d$ through a sequence of threshold comparisons.  Each
+internal node $N_i$ tests $x[\mathit{feat}_i] \leq \theta_i$; every leaf
+stores a class label.  A sample traverses the tree from root to leaf by
+following the satisfied branch at each node, and is classified with the
+label stored at the reached leaf.
+
+\textbf{The comparison problem.}  Computing $\mathbf{1}[x \leq \theta]$
+over a CKKS ciphertext requires replacing the non-differentiable
+indicator $\mathbf{1}[t \geq 0]$ (with $t = \theta - x$) by a polynomial
+$\varphi(t)$ satisfying:
+\begin{equation}
+  \varphi(t) \approx
+  \begin{cases} 1 & t > \delta \\ 0 & t < -\delta \end{cases},
+  \qquad \varphi(t) \in [0,1] \;\forall t.
+  \label{eq:step_approx}
+\end{equation}
+The interval $(-\delta, \delta)$ is a \emph{dead window} within which the
+approximation is not required to be accurate.  Any input sample with
+$|\theta_i - x[\mathit{feat}_i]| < \delta$ lies within the dead window and
+may be misclassified independently of the polynomial degree.
+
+\subsection{HBDT-SumPath Algorithm}
+\label{sec:sumpath}
+
+A naive evaluation of all $2^D - 1$ node comparisons in an FHE circuit
+consumes $\mathcal{O}(D \cdot \deg \varphi)$ multiplicative levels.  For
+$D = 4$ and $\deg \varphi = 8$ this already requires 32 levels -- near the
+practical limit of $L = 12$ for $N = 2^{14}$.
+
+Shin \emph{et al.}~\cite{shin2022privacy} proposed HBDT-SumPath, which
+reformulates tree evaluation as follows.  Define
+$I_i = 1 - \varphi(\theta_i - x[\mathit{feat}_i])$; then $I_i \approx 0$
+means the left branch is taken at node $N_i$, and $I_i \approx 1$ means the
+right branch.  For a leaf $f_k$ reached by the path
+$\{N_1, \ldots, N_D\}$, let:
+\begin{equation}
+  S(f_k) \;=\; \sum_{i : N_i \in \mathit{path}(f_k)} I_i.
+  \label{eq:sumpath}
+\end{equation}
+The correct leaf has $S = 0$ (all comparisons satisfied); any other leaf has
+$S \geq 1$.  The SumPath reduction converts multiplicative depth from
+$\mathcal{O}(D)$ to $\mathcal{O}(1)$: once the per-node indicators are
+evaluated, the sum over a path is a \emph{linear} operation (additions and
+slot rotations) consuming no additional multiplicative levels.
+
+%% =========================================================
+\section{System Architecture}
+\label{sec:system}
+
+The proof-of-concept follows a simple five-stage pipeline: training or
+loading a tree, cleartext soft evaluation for calibration, client-side
+encryption, server-side HE evaluation under CKKS, and client-side
+decryption of the predicted label.  Along this path, the implementation
+also exports tree statistics such as \textit{min\_gap}, derives the
+per-node degree map, and records ciphertext-side scores for evaluation.
+
+\subsection{Polynomial Approximation of the Step Function}
+\label{sec:softapprox}
+
+We approximate $\mathbf{1}[t \geq 0]$ on $[-2, 2]$ by a degree-$n$ odd
+polynomial $p_n(t)$ computed by weighted least-squares:
+\begin{equation}
+  p_n \;=\; \arg\min_{p \in \mathcal{P}_n}
+    \int_{-2}^{2} \bigl(\mathbf{1}[t \geq 0] - p(t)\bigr)^2 \, w(t)\,dt,
+  \label{eq:wls}
+\end{equation}
+where $w(t) = 0$ for $|t| < \delta$ (dead window, $\delta = 0.05$) and
+$w(t) = 1$ elsewhere.  The integral is discretised over 2{,}000 uniform
+points and solved by Gaussian elimination.  The final approximation is
+$\varphi(t) = \mathtt{clamp}(p_n(t),\, 0,\, 1)$.
+
+\textbf{Evaluation under CKKS.}  A degree-$n$ polynomial evaluated naively
+requires $n-1$ multiplications, consuming $n-1$ levels.  We use the
+Baby-Step Giant-Step (BSGS) algorithm~\cite{han2020better}, which reduces
+this to $\lceil \log_2 n \rceil + \lceil n/k \rceil - 2$ levels for optimal
+baby-step size $k = \lfloor \sqrt{n} \rfloor$.  For our degree set
+$\{4, 8, 16, 32\}$ this yields depths $\{2, 3, 4, 5\}$ respectively,
+all within the budget $L = 12$ even after SumPath overhead.
+
+\subsection{Adaptive Degree Selection via Minimum Feature Gap}
+\label{sec:adaptive}
+
+The core insight motivating our adaptive strategy is that different
+internal nodes of the same tree exhibit very different decision difficulty:
+a node that always sees training samples far from its threshold needs only a
+coarse polynomial, while a node whose training samples cluster near the
+threshold requires a fine one.
+
+\textbf{Definition (minimum feature gap).}  For internal node $N_i$ with
+threshold $\theta_i$ on feature $\mathit{feat}_i$:
+\begin{equation}
+  \mathit{min\_gap}(N_i) \;=\; \min_{x \in \mathcal{X}\,:\,N_i \text{ active}}
+    \bigl|x[\mathit{feat}_i] - \theta_i\bigr|,
+  \label{eq:mingap}
+\end{equation}
+where ``$N_i$ active'' means the training sample $x$ reaches $N_i$.
+We collect $\mathit{min\_gap}$ for every node via scikit-learn's
+\texttt{decision\_path()} API during training and export the values to a
+configuration file consumed by the C++ inference engine.
+
+\textbf{Degree assignment rule.}  Let $g = \mathit{min\_gap}(N_i)$:
+\begin{align}
+  n(g) = \begin{cases}
+    4  & g \geq 0.08   \\
+    8  & 0.04 \leq g < 0.08 \\
+    16 & 0.015 \leq g < 0.04 \\
+    32 & g < 0.015 \text{ or } g = 0
+  \end{cases}
+  \label{eq:degmap}
+\end{align}
+This rule ensures that nodes whose minimum gap falls within the dead window
+$\delta = 0.05$ are assigned the highest degree, maximising approximation
+quality where it matters most.
+
+\textbf{Node-wise logit normalisation.}  For the pre-trained SortingHat
+trees, we found that the raw comparison logits $\theta_i - x[\mathit{feat}_i]$
+can have very different scales across nodes, which makes the adaptive degree
+heuristic unstable when it is driven by an unnormalised gap alone.  We
+therefore calibrate each internal node with
+\begin{equation}
+  \mathit{norm}_i = \max_{x \in \mathcal{X}_{\mathrm{calib}}}
+  \bigl|x[\mathit{feat}_i] - \theta_i\bigr|,
+\end{equation}
+and evaluate the soft comparator on the normalised logit
+$(\theta_i - x[\mathit{feat}_i]) / \mathit{norm}_i$.  The adaptive degree is
+then selected from the normalised gap
+$\mathit{min\_gap}(N_i) / \mathit{norm}_i$.  This calibration step is what
+allows the adaptive pipeline to recover the hard-tree baseline on Breast,
+Heart, and Steel.
+
+\subsection{CKKS Parameters and Vertical Packing}
+
+The implementation uses Microsoft SEAL 4.1.2 and configures CKKS at runtime.
+The polynomial modulus degree $N$ is selected automatically from
+$\{2^{13}, 2^{14}, 2^{15}\}$, i.e., $\{8{,}192, 16{,}384, 32{,}768\}$,
+according to the slot budget and the coefficient modulus chain.  The latter
+is instantiated as $\{60, \underbrace{s,\ldots,s}_{L\ \mathrm{times}}, 60\}$,
+where $s \in \{40,45,50\}$ is the scale modulus size of the active profile
+and $L \geq 10$ is the target multiplicative depth.  The effective CKKS
+scale is $\Delta = 2^s$.  For the larger datasets used in our main runs,
+this typically yields $N = 2^{14}$ and $s = 40$, consistent with a 128-bit
+security configuration under the HE standard~\cite{albrecht2021homomorphic}.
+
+\textbf{Vertical packing (SIMD batching).}  Each input sample of $d$ features
+is encoded over $n_{\max}$ buckets per feature, where $n_{\max}$ is profile
+dependent ($4$ for the small profile, $2$ otherwise), occupying
+$d \cdot n_{\max}$ slots.  Multiple samples are packed into a single
+ciphertext by vertical concatenation.  For example, with $N/2 = 8{,}192$
+slots and $d = 30$ features under the large profile ($n_{\max}=2$), one
+sample occupies $60$ slots.  The implementation further caps the effective
+packed batch size to at most 32 samples in order to control memory usage and
+the overhead of Galois rotations and key switching.
+
+%% =========================================================
+\section{Precision Impact Analysis}
+\label{sec:precision}
+
+This section develops the main analytical contribution of the paper:
+a decomposition of the accuracy loss observed in private inference into two
+independent and interpretable sources.
+
+\subsection{Two Sources of Accuracy Loss}
+\label{sec:two_sources}
+
+Let $\mathcal{A}_{\mathrm{hard}}$ denote the accuracy of standard (hard)
+cleartext inference, $\mathcal{A}_{\mathrm{soft}}$ the accuracy of cleartext
+soft inference (using $\varphi$ instead of $\mathbf{1}$), and
+$\mathcal{A}_{\mathrm{HE}}$ the accuracy of HE inference.  We define:
+\begin{align}
+  \Delta_{\mathrm{approx}} &\;=\; \mathcal{A}_{\mathrm{hard}}
+                                  - \mathcal{A}_{\mathrm{soft}}, \label{eq:delta_approx} \\
+  \Delta_{\mathrm{CKKS}}   &\;=\; \mathcal{A}_{\mathrm{soft}}
+                                  - \mathcal{A}_{\mathrm{HE}}.   \label{eq:delta_ckks}
+\end{align}
+
+\textbf{Source 1: Approximation error} ($\Delta_{\mathrm{approx}}$).
+This error arises whenever a sample falls within the dead window of some
+active node: $|x[\mathit{feat}_i] - \theta_i| < \delta$.  In this region
+$\varphi(\theta_i - x[\mathit{feat}_i]) \approx 0.5$, rendering the branch
+decision stochastic.  This error is \emph{intrinsic to the approximation
+strategy} and is fully visible in cleartext.  It can be reduced by
+decreasing $\delta$ or increasing the polynomial degree $n$.
+
+\textbf{Source 2: CKKS noise error} ($\Delta_{\mathrm{CKKS}}$).
+This error arises from the residual noise $\varepsilon_\ell$
+(Eq.~\eqref{eq:ckks_noise}) accumulated during homomorphic polynomial
+evaluation.  For a sample with $|\theta_i - x| \gg \varepsilon_\ell$,
+the noise is absorbed by the saturation of $\varphi$ and the branch
+decision is unchanged.  The noise becomes decisive only when
+$|\theta_i - x| \lesssim \varepsilon_\ell$, which occurs for samples with
+$\mathit{min\_gap}$ near or below $\varepsilon_\ell \approx 10^{-6}$.
+
+\begin{remark}
+$\Delta_{\mathrm{approx}}$ and $\Delta_{\mathrm{CKKS}}$ are not additive in
+general: a sample mis-classified by the approximation in cleartext is not
+counted again in $\Delta_{\mathrm{CKKS}}$.  However, they are
+\emph{statistically independent} for datasets where the two error populations
+do not overlap.
+\end{remark}
+
+\subsection{Three Precision Regimes}
+\label{sec:regimes}
+
+Table~\ref{tab:regimes} summarises the three regimes as a function of
+$\mathit{min\_gap}$ relative to the dead window $\delta$ and the CKKS noise
+floor $\varepsilon$.
+
+\begin{table}[t]
+\centering
+\caption{Precision regimes as a function of minimum feature gap.
+$\delta = 0.05$, $\varepsilon \approx 10^{-6}$ (depth 6, $\Delta = 2^{40}$,
+$N = 2^{14}$).}
+\label{tab:regimes}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Regime & Condition & Dominant loss & Typical $\Delta_{\mathrm{CKKS}}$ \\
+\midrule
+I   (safe)    & $\mathit{min\_gap} \geq \delta$                  & None              & $< 1\%$     \\
+II  (approx.) & $\varepsilon \leq \mathit{min\_gap} < \delta$    & $\Delta_{\mathrm{approx}}$ & $\approx 0\%$ in our runs \\
+III (critical)& $\mathit{min\_gap} < 5 \times 10^{-3}$          & Approx.\ and/or CKKS & $0$--$22.7\%$ (unnormalised baseline) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Regime I.}  When $\mathit{min\_gap} \geq \delta$, all training
+samples are outside the dead window.  The polynomial $\varphi$ saturates
+to 0 or 1 before CKKS noise can accumulate, and both
+$\Delta_{\mathrm{approx}}$ and $\Delta_{\mathrm{CKKS}}$ are negligible.
+
+\textbf{Regime II.}  When $\mathit{min\_gap}$ falls between $\varepsilon$ and
+$\delta$, some samples lie inside the dead window and experience
+approximation error.  CKKS noise is still below the gap and does not add to
+the cleartext loss.  This regime is correctly handled by increasing the
+polynomial degree (reducing the effective dead window at the cost of
+multiplicative depth).
+
+\textbf{Regime III.}  When $\mathit{min\_gap} \ll \delta$ and in particular
+$\mathit{min\_gap} \lesssim 5 \times 10^{-3}$, CKKS noise can become
+comparable to the gap at critical nodes, producing additional HE-only errors
+beyond those already visible in cleartext.  In this regime, accuracy
+degradation can be substantial and requires either (a) increasing $\Delta$ to
+$2^{50}$ to lower the noise floor, (b) increasing $N$ to $2^{15}$ to gain
+additional depth budget, or (c) retraining the tree with a
+$\mathit{min\_gap}$-regularisation objective.
+
+\subsection{Noise Propagation Through SumPath}
+\label{sec:noise_prop}
+
+Under SumPath, the per-leaf score $S(f_k) = \sum_{i \in \mathit{path}} I_i$
+accumulates noise linearly.  Let $\hat{I}_i = I_i + e_i$ be the noisy HE
+indicator, with $|e_i| \leq \varepsilon_\ell$.  Then:
+\begin{equation}
+  \hat{S}(f_k) \;=\; S(f_k) + \sum_{i \in \mathit{path}} e_i, \qquad
+  \bigl|\hat{S}(f_k) - S(f_k)\bigr| \;\leq\; D \cdot \varepsilon_\ell,
+  \label{eq:noise_sum}
+\end{equation}
+where $D$ is the tree depth.  Since $S(f_k) \in \{0, 1, \ldots, D\}$ and
+correct classification requires $S(f^*) = 0$ uniquely, a misclassification
+occurs when $\hat{S}(f^*) \geq 1$ or $\hat{S}(f') \leq 0$ for some
+$f' \neq f^*$.  With $D = 4$ and $\varepsilon_\ell \approx 10^{-6}$:
+\begin{equation}
+  D \cdot \varepsilon_\ell \;=\; 4 \times 10^{-6} \;\ll\; 1,
+\end{equation}
+meaning SumPath noise propagation is negligible compared to the
+indicator-level approximation errors.  The dominant precision loss therefore
+stems from individual node evaluations, not from path aggregation.
+
+%% =========================================================
+\section{Experimental Evaluation}
+\label{sec:experiments}
+
+\subsection{Setup}
+
+\textbf{Datasets.}  We evaluate on seven benchmark datasets:
+Iris ($d=4$, 3 classes), Wine ($d=13$, 3 classes), Cancer ($d=30$, 2
+classes), Digits ($d=64$, 10 classes), Breast ($d=30$, 2 classes), Heart
+($d=13$, 2 classes), and Steel ($d=33$, 2 classes).  For Iris, Wine, Cancer,
+and Digits we train a scikit-learn \texttt{DecisionTreeClassifier} with
+$\mathit{max\_depth} = 4$; for Breast, Heart, and Steel we use pre-trained
+trees from the SortingHat benchmark~\cite{sortinghat}.
+
+\textbf{Evaluation protocol.}  For each dataset we run three modes:
+\emph{Hard clear} (exact comparisons), \emph{Soft adaptive} (per-node
+degrees via Eq.~\eqref{eq:degmap}), and \emph{Adaptive HE}.  HE inference is
+executed in a containerised environment (Podman, Ubuntu 22.04) on a laptop
+CPU.  We report accuracy, the adaptive approximation gap with respect to the
+hard baseline, the residual adaptive HE gap with respect to adaptive
+cleartext, and average per-sample HE inference time.
+
+\textbf{Implementation setup used in the POC.}  The proof-of-concept
+evaluates an already trained tree at runtime rather than retraining a model
+online.  In practice, the C++ pipeline loads a tree from \texttt{tree.csv},
+\texttt{tree.json}, or compatible benchmark formats, reconstructs the binary
+tree in memory, and then runs both cleartext and HE inference.  The full
+pipeline is orchestrated by a PowerShell script (\texttt{run.ps1}) that
+builds and runs two executables, \texttt{poc\_clear} and \texttt{poc\_he},
+inside a Podman container with Microsoft SEAL 4.1.2.  Unless otherwise
+stated, we evaluate the first $n$ samples of the test split, with
+$n \in [20,32]$ in the main reported runs.  For the two Spam-family
+datasets, the current campaign only validates small cleartext sanity checks:
+the real-HE pipeline still runs out of memory under the available Podman
+configuration.
+
+\textbf{HE runtime profiles.}  The current implementation selects one of
+three CKKS profiles from the feature dimension $d$.  For $d \leq 4$, a
+\emph{small} profile uses layout resolution $n_{\max}=4$, global polynomial
+degree $8$, maximum adaptive degree $32$, and scale modulus size $50$ bits.
+For $5 \leq d \leq 16$, a \emph{medium} profile uses $n_{\max}=2$, global
+degree $4$, maximum adaptive degree $16$, and scale modulus size $45$ bits.
+For $d > 16$, a \emph{large} profile uses $n_{\max}=2$, global degree $4$,
+maximum adaptive degree $8$, and scale modulus size $40$ bits.  The target
+multiplicative depth is derived automatically from the largest adaptive
+degree in the tree, with a minimum depth of 10 levels.
+
+\begin{table}[t]
+\centering
+\caption{Runtime HE profiles used in the implementation.}
+\label{tab:he_profiles}
+\begin{tabular}{@{}l c c c c@{}}
+\toprule
+Profile & Feature range & $n_{\max}$ & global degree & max adaptive degree \\
+\midrule
+Small  & $d \leq 4$ & 4 & 8 & 32 \\
+Medium & $5 \leq d \leq 16$ & 2 & 4 & 16 \\
+Large  & $d > 16$ & 2 & 4 & 8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Benchmark Scope}
+
+In addition to the main experiments of our implementation, we collected local
+benchmark traces from three adjacent baselines: an Akavia-style SEAL
+pipeline, the SortingHat benchmark family, and a Concrete-ML prototype.  We
+include these runs in the experimental scope of the paper because they help
+position our POC relative to existing implementation styles, but they should
+not be interpreted as perfectly apples-to-apples comparisons.  In
+particular, Akavia and our POC both rely on real homomorphic execution with
+Microsoft SEAL, whereas the Concrete-ML runs available in our workspace are
+reported in FHE-simulated mode.  Likewise, the SortingHat runs often use
+external pre-trained trees and expose different failure modes, including
+out-of-memory cases on larger datasets.
+
+\begin{table}[t]
+\centering
+\caption{Benchmark families considered in the local experimental campaign.}
+\label{tab:benchmark_families}
+\footnotesize
+\begin{tabular}{@{}p{2.2cm} p{2.8cm} p{4.0cm} p{3.0cm}@{}}
+\toprule
+Family & HE backend / mode & Main datasets & Role in this paper \\
+\midrule
+My POC & SEAL, real HE & Iris, Cancer, Wine, Digits, Breast, Heart, Steel & Primary quantitative study \\
+Akavia-style baseline & SEAL, real HE & Iris, Cancer, Wine, Digits & Historical packed baseline \\
+SortingHat & External benchmark pipelines, real HE & Breast, Heart, Steel, Spam-family & Stress-test and OOM analysis \\
+Concrete-ML & Concrete-ML, FHE simulation & Iris, Cancer, Wine, Digits, Breast, Heart, Steel & Adjacent reference only \\
+\bottomrule
+\end{tabular}
+\normalsize
+\end{table}
+
+The quantitative tables that follow focus primarily on \emph{My POC},
+because this is the only family in which we control the full inference
+pipeline, including hard, adaptive cleartext, and adaptive HE variants under
+a common evaluation protocol.  Akavia results are used as a historical SEAL
+baseline on standard datasets; SortingHat results are used to document
+behaviour on externally supplied trees and memory-intensive cases; and
+Concrete-ML results are used only as an auxiliary point of comparison since
+they correspond to FHE-simulated execution rather than the same real-HE
+runtime used in the rest of the paper.  For these external families, the
+comparative numbers reported below are taken from the locally generated
+aggregate benchmark plots available in our workspace and therefore cover
+only the dataset-project pairs that are visible in those plots.
+
+\subsection{Main Results}
+
+Table~\ref{tab:main_results} reports the full experimental results on the
+representative batch sizes used in our evaluation.
+
+\begin{table}[t]
+\centering
+\caption{Accuracy (\%) across the main inference modes retained in this
+paper.  Timing is average adaptive HE inference time per sample (ms).}
+\label{tab:main_results}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}l r r r r r@{}}
+\toprule
+Dataset & $d$ & $n$ & Hard & Soft Ad. & HE Ad. & ms/samp. \\
+\midrule
+Iris    & 4  & 20  & 100.0 &  95.0 &  95.0 & 286 \\
+Cancer  & 30 & 32  & 100.0 & 100.0 &  96.9 & 151 \\
+Wine    & 13 & 26  & 100.0 & 100.0 & 100.0 & 224 \\
+Digits  & 64 & 32  & 100.0 &  96.9 &  96.9 & 146 \\
+Breast  & 30 & 32  &  90.6 &  90.6 &  90.6 & 320 \\
+Heart   & 13 & 26  &  84.6 &  84.6 &  84.6 &  91 \\
+Steel   & 33 & 32  & 100.0 & 100.0 & 100.0 &  95 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Precision decomposition.}  Table~\ref{tab:decomposition} presents
+the decomposed accuracy loss, showing the dominant error source for each
+dataset.
+
+\begin{table}[t]
+\centering
+\caption{Decomposed adaptive accuracy loss. $\Delta_{\mathrm{approx}}$ is
+the adaptive cleartext gap versus hard; $\Delta_{\mathrm{CKKS}}$ is the
+additional adaptive HE gap versus adaptive cleartext. Regime per
+Section~\ref{sec:regimes}.}
+\label{tab:decomposition}
+\begin{tabular}{@{}l c c c c@{}}
+\toprule
+Dataset & $\mathit{min\_gap}$ & Regime
+        & $\Delta_{\mathrm{approx}}$ (\%) & $\Delta_{\mathrm{CKKS}}$ (\%) \\
+\midrule
+Iris    & 0.017 & II       & 5.0  & 0.0  \\
+Cancer  & 0.002 & III      & 0.0  & 3.1 \\
+Wine    & 0.003 & III      & 0.0  & 0.0  \\
+Digits  & --    & --       & 3.1  & 0.0  \\
+Breast  & $<0.02$ & III    & 0.0 & 0.0 \\
+Heart   & $<0.03$ & III    & 0.0 & 0.0 \\
+Steel   & $<0.02$ & III    & 0.0 & 0.0  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Cross-Project Benchmark Comparison}
+
+Table~\ref{tab:benchmark_accuracy_results} summarises the accuracy values
+visible in the local cross-project benchmark graph.  We use the adaptive HE
+result of our POC as the main comparison point because it reflects the final
+configuration after node-wise normalisation.  Digits is absent from this
+accuracy comparison because no aligned external value is displayed in the
+available graph.
+
+\begin{table}[t]
+\centering
+\caption{Cross-project accuracy comparison (\%).  ``--'' indicates that no
+value is displayed for that project-dataset pair in the local benchmark
+graph.}
+\label{tab:benchmark_accuracy_results}
+\footnotesize
+\begin{tabular}{@{}l c c c c@{}}
+\toprule
+Dataset & My POC HE Ad. & Akavia & SortingHat & Concrete-ML \\
+\midrule
+Cancer & 96.9 & 78.1 & --   & 93.3 \\
+Wine   & 100.0 & 61.5 & --   & 100.0 \\
+Iris   & 95.0 & 90.0 & --   & 100.0 \\
+Breast & 90.6 & --   & 90.6 & 100.0 \\
+Heart  & 84.6 & --   & 81.8 & 81.8 \\
+Steel  & 100.0 & --   & 100.0 & 100.0 \\
+\bottomrule
+\end{tabular}
+\normalsize
+\end{table}
+
+Table~\ref{tab:benchmark_latency_results} reports the average per-sample
+times extracted from the local latency benchmark graph.  Because some
+projects were run with different sample counts, we report the visible batch
+size $n$ alongside each timing when it is legible in the graph.
+
+\begin{table}[t]
+\centering
+\caption{Cross-project average HE inference time per sample (ms), with the
+visible benchmark batch size in parentheses.}
+\label{tab:benchmark_latency_results}
+\footnotesize
+\begin{tabular}{@{}p{1.5cm} p{2.2cm} p{2.2cm} p{2.2cm} p{2.2cm}@{}}
+\toprule
+Dataset & My POC & Akavia & SortingHat & Concrete-ML \\
+\midrule
+Breast & 320.3 (32) & -- & 154.6 & 190.5 \\
+Cancer & 151.1 (32) & 18996.3 & -- & 430.5 \\
+Heart  & 90.5 (26) & -- & 35.1 & 537.1 \\
+Iris   & 286.1 (20) & 12695.2 (10) & -- & 561.3 (10) \\
+Steel  & 95.4 (32) & -- & 38.8 & 418.2 \\
+Wine   & 224.5 (26) & 13274.6 & -- & 417.7 \\
+\bottomrule
+\end{tabular}
+\normalsize
+\end{table}
+
+\textbf{Adaptive pipeline behaviour.}  The adaptive configuration is now the
+central reference point of the paper.  On Breast, Heart, and Steel,
+node-wise logit normalisation allows adaptive cleartext and adaptive HE to
+match the hard baseline exactly.  On Wine, the adaptive pipeline also
+preserves the hard-tree accuracy under HE.  On Digits, adaptive HE matches
+adaptive cleartext at 96.9\%.  Cancer remains the main counter-example:
+adaptive cleartext reaches 100.0\%, but adaptive HE still drops to 96.9\%,
+showing that very small gaps can remain CKKS-sensitive even after local
+normalisation.
+
+\subsection{Precision-Regime Observations}
+
+\textbf{Iris (Regime II).}  The minimum gap $g = 0.017$ lies well above
+$\varepsilon = 10^{-6}$ and slightly below $\delta = 0.05$.  In the latest
+run, the adaptive pipeline stays 5 points below the hard baseline
+(95.0\% vs.\ 100.0\%) both in cleartext and in HE.  This suggests that, on
+this small batch, the current degree heuristic is slightly too aggressive.
+
+\textbf{Cancer (Regime III).}  The minimum gap $g \approx 0.002$ is far
+below $\delta$.  After node-wise normalisation, the adaptive cleartext run
+now reaches 100.0\%, so the approximation loss disappears on the evaluated
+batch.  The remaining degradation is HE-specific: adaptive HE drops to
+96.9\%, yielding $\Delta_{\mathrm{CKKS}} \approx 3.1\%$.  Cancer is
+therefore the clearest current example of a dataset that remains limited by
+very small gaps even after the soft-comparison calibration has been fixed.
+
+\textbf{Wine (Regime III).}  Despite $g = 0.003 < \delta$, cleartext soft
+adaptive inference achieves 100\% accuracy, and adaptive HE preserves that
+result.  Wine therefore remains a strong example of adaptive degree
+selection improving robustness without any visible cleartext loss.
+
+\textbf{Heart, Breast, and Steel after node-wise logit normalisation.}
+For the three pre-trained SortingHat trees, the dominant source of loss was
+not CKKS noise itself but the lack of local logit normalisation in the soft
+comparison stage.  After calibrating each internal node with a node-specific
+normalisation factor $\max_x |x[\mathrm{feat}] - \theta|$ and assigning the
+polynomial degree from the normalised gap $\mathit{min\_gap}/\mathit{norm}$,
+the adaptive soft mode recovers the hard-tree accuracy in cleartext and under
+CKKS on all three datasets.  Concretely, Breast rises from 40.6\% to 90.6\%,
+Heart from 57.7\% to 84.6\%, and Steel from 62.5\% to 100.0\% in adaptive
+mode, with HE matching the cleartext adaptive baseline in each case.  This
+shows that these datasets were not inherently CKKS-limited; instead, they
+were poorly conditioned in the unnormalised comparison space.
+
+\subsection{Runtime Performance}
+
+HE inference time ranges from 90 ms/sample (Heart, $d = 13$, batch 26) to
+320 ms/sample (Breast, $d = 30$, batch 32) in the adaptive mode among the
+latest validated runs, with Iris still remaining costlier than the larger
+datasets because of key-switching overhead at small batch sizes.  These
+timings are consistent with previously reported
+results for CKKS-based ML inference on laptop hardware~\cite{dathathri2019chet}
+and confirm that private decision tree inference is practical for
+non-real-time applications.
+
+\subsection{Cross-Benchmark Observations}
+
+The additional benchmark families available in our workspace support three
+main observations.  First, the Akavia-style SEAL baseline is substantially
+slower than our current implementation on the overlapping standard datasets:
+for example, the local graph reports 12.7~s/sample on Iris, 18.9~s/sample on
+Cancer, and 13.3~s/sample on Wine, versus 286~ms, 151~ms, and 224~ms/sample
+respectively for our POC.  Accuracy is also lower on the same overlaps, with
+78.1\% on Cancer, 61.5\% on Wine, and 90.0\% on Iris compared with our
+adaptive HE results of 96.9\%, 100.0\%, and 95.0\%.
+
+Second, the SortingHat benchmark family is competitive on the externally
+supplied trees from which it originates.  In the local comparison graph it
+matches our adaptive HE accuracy on Breast (90.6\%) and Steel (100.0\%), and
+trails slightly on Heart (81.8\% vs.\ 84.6\%).  It is also faster on those
+tasks, with visible per-sample times of 154.6~ms on Breast, 35.1~ms on
+Heart, and 38.8~ms on Steel, although these comparisons remain imperfect
+because the benchmarked sample counts are not always identical.
+
+Third, the Concrete-ML prototype provides a strong neighbouring reference in
+accuracy while remaining a simulation-based backend.  In the local graph it
+reaches 100.0\% on Wine, Breast, and Steel, 93.3\% on Cancer, and 81.8\% on
+Heart.  Its latency remains above our POC on the displayed overlaps, ranging
+from about 190~ms/sample on Breast to about 561~ms/sample on Iris.  These
+results are useful for situating our implementation, but they should not be
+be read as a like-for-like real-HE comparison.
+
+%% =========================================================
+\section{Related Work}
+\label{sec:related}
+
+\textbf{Private tree inference.}  Bos \emph{et al.}~\cite{bos2014private}
+pioneered FHE-based decision tree evaluation using BGV.  Tai \emph{et
+al.}~\cite{tai2017mining} proposed a garbled-circuit approach with lower
+communication.  Kiss \emph{et al.}~\cite{kiss2019sok} provided a
+comparative survey.  Tueno \emph{et al.}~\cite{tueno2019private} exploited
+TFHE for exact binary evaluation, avoiding approximation entirely but at the
+cost of much higher per-gate overhead.
+
+\textbf{Polynomial approximation for FHE.}  Han and Ki~\cite{han2020better}
+formalised BSGS polynomial evaluation for CKKS.  Chiang \emph{et
+al.}~\cite{chiang2022} studied Chebyshev-based approximations of the
+comparison function.  Compared to these works, we evaluate approximations at
+a per-node granularity and explicitly quantify the approximation contribution
+to downstream task accuracy.
+
+\textbf{HBDT-SumPath.}  Shin \emph{et al.}~\cite{shin2022privacy} introduced
+the SumPath depth-reduction algorithm that we build upon.  Our work extends
+it with an adaptive degree selection strategy and a formal precision
+decomposition framework absent in the original paper.
+
+\textbf{Precision analysis of CKKS.}  Cheon \emph{et
+al.}~\cite{cheon2021efficient} and Bossuat \emph{et al.}~\cite{bossuat2021}
+studied error propagation in CKKS for polynomial evaluation circuits.  Our
+analysis is application-specific: we connect CKKS noise to ML accuracy at
+the semantic level, through the lens of min\_gap, a previously unreported
+metric for privacy-preserving decision tree evaluation.
+
+%% =========================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have presented a complete implementation of private decision tree
+inference under CKKS and, more importantly, a principled decomposition of
+the accuracy loss into two independent sources: polynomial approximation
+error and CKKS residual noise.  The \emph{minimum feature gap}
+$\mathit{min\_gap}$ emerges as the key predictor of which source dominates:
+datasets outside the most critical small-gap regime show little or no
+additional CKKS loss, while very small-gap datasets remain sensitive to
+calibration and modelling choices.  In particular, our experiments show
+that part of the loss that
+initially appeared to be HE-specific was in fact caused by unnormalised
+comparison logits.  After introducing node-wise logit normalisation, the
+adaptive pipeline fully recovers the hard-tree baseline on Breast, Heart,
+and Steel in both cleartext and CKKS, while Cancer remains the main dataset
+whose adaptive HE accuracy still trails the adaptive cleartext baseline.
+
+Our results have two immediate practical implications.  First,
+practitioners deploying private inference should compute $\mathit{min\_gap}$
+before selecting CKKS parameters: a small gap demands larger scale
+$\Delta = 2^{50}$ or additional multiplicative depth only after the
+comparison space has been properly calibrated.  Second, model trainers should
+consider both $\mathit{min\_gap}$ and node-wise logit scale as regularisation
+targets alongside standard accuracy metrics, so that the resulting tree is
+cryptographically friendly before encryption.
+
+Future work will investigate min\_gap-regularised training, extension to
+random forests and gradient-boosted trees, stronger calibration strategies
+for externally supplied trees, dedicated low-memory HE profiles for the
+Spam-family datasets, and a formal worst-case bound relating
+$\mathit{min\_gap}$, node-wise normalisation, CKKS parameters, and
+guaranteed accuracy.
+
+\paragraph{Acknowledgements.}
+The authors thank the OpenFHE and Microsoft SEAL communities for their
+open-source implementations.
+
+%% =========================================================
+\begin{thebibliography}{16}
+
+\bibitem{albrecht2021homomorphic}
+Albrecht, M., et al.:
+Homomorphic encryption standard.
+In: Lauter, K. et al. (eds.) Protecting Privacy through Homomorphic Encryption, pp.~31--62.
+Springer, Cham (2021).
+\href{https://doi.org/10.1007/978-3-030-77287-1_2}
+     {https://doi.org/10.1007/978-3-030-77287-1\_2}
+
+\bibitem{bos2014private}
+Bos, J.W., Lauter, K., Loftus, J., Naehrig, M.:
+Improved security for a ring-based fully homomorphic encryption scheme.
+In: Stam, M. (ed.) IMACC 2013, LNCS, vol.~8308, pp.~45--64.
+Springer, Heidelberg (2013).
+\href{https://doi.org/10.1007/978-3-642-45239-0_4}
+     {https://doi.org/10.1007/978-3-642-45239-0\_4}
+
+\bibitem{bossuat2021}
+Bossuat, J.P., Mouchet, C., Troncoso-Pastoriza, J., Hubaux, J.P.:
+Efficient bootstrapping for approximate homomorphic encryption with
+non-sparse keys.
+In: Canteaut, A., Standaert, F.X. (eds.) EUROCRYPT 2021, LNCS, vol.~12696,
+pp.~587--617. Springer, Cham (2021).
+
+\bibitem{chen2020simple}
+Chen, H., Iliashenko, I., Laine, K.:
+When HEAAN meets SEAL: High-performance evaluation of high-precision rational polynomials.
+Cryptology ePrint Archive 2019/1325 (2019).
+
+\bibitem{cheon2017homomorphic}
+Cheon, J.H., Kim, A., Kim, M., Song, Y.:
+Homomorphic encryption for arithmetic of approximate numbers.
+In: Takagi, T., Peyrin, T. (eds.) ASIACRYPT 2017, LNCS, vol.~10624,
+pp.~409--437. Springer, Cham (2017).
+\href{https://doi.org/10.1007/978-3-319-70694-8_15}
+     {https://doi.org/10.1007/978-3-319-70694-8\_15}
+
+\bibitem{cheon2021efficient}
+Cheon, J.H., Han, K., Kim, A., Kim, M., Song, Y.:
+Bootstrapping for approximate homomorphic encryption.
+In: Nielsen, J.B., Rijmen, V. (eds.) EUROCRYPT 2018, LNCS, vol.~10820,
+pp.~360--384. Springer, Cham (2018).
+
+\bibitem{chiang2022}
+Chiang, Y.C., et al.:
+Comparison and decision-tree homomorphic evaluation with CKKS.
+Cryptology ePrint Archive 2022/280 (2022).
+
+\bibitem{dathathri2019chet}
+Dathathri, R., et al.:
+CHET: An optimizing compiler for fully-homomorphic neural-network inferencing.
+In: Proceedings of PLDI 2019, pp.~142--156. ACM, New York (2019).
+
+\bibitem{han2020better}
+Han, K., Ki, D.:
+Better bootstrapping for approximate homomorphic encryption.
+In: Jarecki, S. (ed.) CT-RSA 2020, LNCS, vol.~12006, pp.~364--390.
+Springer, Cham (2020).
+
+\bibitem{kiss2019sok}
+Kiss, \'{A}., Liu, J., Schneider, T., Asokan, N., Pinkas, B.:
+Private set intersection for unequal set sizes with mobile applications.
+PoPETs 2017(4), 177--197 (2017).
+
+\bibitem{shin2022privacy}
+Shin, Y., Choi, R., Cheon, J.H.:
+Privacy-preserving decision tree inference with CKKS.
+Cryptology ePrint Archive 2021/1337 (2021).
+
+\bibitem{sortinghat}
+Oliynyk, D., Mayer, R., Rauber, A.:
+I know what you trained last summer: A survey on stealing machine learning models and defences.
+ACM Comput. Surv. 55(14), 1--41 (2023).
+
+\bibitem{tai2017mining}
+Tai, R.K.H., Ma, J.P.K., Zhao, Y., Chow, S.S.M.:
+Privacy-preserving decision trees evaluation via linear functions.
+In: Foley, S.N., Gollmann, D., Snekkenes, E. (eds.) ESORICS 2017, LNCS,
+vol.~10493, pp.~494--512. Springer, Cham (2017).
+
+\bibitem{tueno2019private}
+Tueno, A., Kerschbaum, F., Katzenbeisser, S.:
+Private evaluation of decision trees using sublinear cost.
+PoPETs 2019(1), 266--286 (2019).
+
+\end{thebibliography}
+
+\end{document}

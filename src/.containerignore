@@ -1,0 +1,12 @@
+build
+build-podman
+.git
+.idea
+.vscode
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.lib
