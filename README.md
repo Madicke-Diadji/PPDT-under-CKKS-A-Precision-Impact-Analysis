@@ -56,6 +56,46 @@ If you want to force a rebuild:
 .\run.ps1 -Dataset breast -SampleCount 32 -Rebuild
 ```
 
+## Container Usage
+
+The recommended way to run this POC is through the provided PowerShell entry point:
+
+```powershell
+.\run.ps1 -Dataset iris -SampleCount 20
+```
+
+`run.ps1` is the official workflow for this repository. It:
+
+- builds the container image when needed
+- compiles `poc_clear` and `poc_he` inside the container
+- runs clear and HE inference
+- stores logs and CSV outputs in `results/`
+
+The repository is currently scripted around `Podman`, but Docker users can still use the same container logic in two ways:
+
+- simplest option: use `Podman`, since `run.ps1` already automates the full workflow
+- manual option: adapt the commands from [src/README.md](/abs/c:/Users/madicke-diadji.mbodj/POC_DT/My_Poc_all/src/README.md) by replacing `podman` with `docker` if your environment supports the same bind mounts and shell commands
+
+If you are using Docker instead of Podman, keep in mind that the ready-to-run automation in this repository targets `PowerShell + Podman`. Docker use is therefore best treated as a manual advanced setup rather than the default supported path.
+
+Example Docker workflow:
+
+```powershell
+docker build --build-arg SEAL_BUILD_JOBS=2 -t poc-hbdt-seal -f src/Containerfile src
+docker run --rm -v "${PWD}:/workspace" -w /workspace/src poc-hbdt-seal bash -lc "cmake -S . -B /workspace/build-docker -DCMAKE_BUILD_TYPE=Release -DSEAL_ROOT=\$SEAL_ROOT -DSEAL_DIR=\$SEAL_DIR && cmake --build /workspace/build-docker --target poc_clear --parallel && cmake --build /workspace/build-docker --target poc_he --parallel 1"
+docker run --rm -v "${PWD}:/workspace" -w /workspace/src poc-hbdt-seal bash -lc "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:\$LD_LIBRARY_PATH && /workspace/build-docker/poc_clear /workspace/data/tree.csv 13 3 26"
+docker run --rm -v "${PWD}:/workspace" -w /workspace/src poc-hbdt-seal bash -lc "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:\$LD_LIBRARY_PATH && /workspace/build-docker/poc_he /workspace/data/tree.csv 13 3 26"
+```
+
+In the example above:
+
+- the first command builds the container image
+- the second command compiles the two executables inside the container
+- the last two commands run clear and HE inference manually
+- `13 3 26` correspond to `features`, `classes`, and `sample_count` for the chosen dataset and must be adapted if you switch dataset
+
+For most users, `.\run.ps1` remains the safer and easier entry point because it automates those steps and records the outputs in the expected result files.
+
 ## Supported Datasets
 
 The main script currently exposes these dataset names:
