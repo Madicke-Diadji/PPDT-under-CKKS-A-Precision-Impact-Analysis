@@ -21,15 +21,10 @@ $containerPocHe = "$containerBuildDir/poc_he"
 $datasetMenu = @(
   [PSCustomObject]@{ Id = 1; Name = "iris";    Type = "standard"; Prefix = "iris" }
   [PSCustomObject]@{ Id = 2; Name = "cancer";  Type = "standard"; Prefix = "cancer" }
-  [PSCustomObject]@{ Id = 3; Name = "digits";  Type = "standard"; Prefix = "digits" }
-  [PSCustomObject]@{ Id = 4; Name = "heart";   Type = "special";  Prefix = $null }
-  [PSCustomObject]@{ Id = 5; Name = "wine";    Type = "standard"; Prefix = "wine" }
-  [PSCustomObject]@{ Id = 6; Name = "steel";   Type = "special";  Prefix = $null }
-  [PSCustomObject]@{ Id = 7; Name = "breast";  Type = "special";  Prefix = $null }
-  [PSCustomObject]@{ Id = 8; Name = "spam";    Type = "special";  Prefix = $null }
-  [PSCustomObject]@{ Id = 9; Name = "spam2";   Type = "special";  Prefix = $null }
-  [PSCustomObject]@{ Id = 10; Name = "fake_art"; Type = "special"; Prefix = $null }
-  [PSCustomObject]@{ Id = 11; Name = "fake_hou"; Type = "special"; Prefix = $null }
+  [PSCustomObject]@{ Id = 3; Name = "heart";   Type = "special";  Prefix = $null }
+  [PSCustomObject]@{ Id = 4; Name = "wine";    Type = "standard"; Prefix = "wine" }
+  [PSCustomObject]@{ Id = 5; Name = "steel";   Type = "special";  Prefix = $null }
+  [PSCustomObject]@{ Id = 6; Name = "breast";  Type = "special";  Prefix = $null }
 )
 
 function Invoke-LoggedCommand {
@@ -101,6 +96,48 @@ function Convert-ToNullableDouble {
   return [double]::Parse($Value, [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
+function Get-PredictionMetricsFromCsv {
+  param(
+    [string]$Path,
+    [string[]]$PredictionColumns
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) {
+    return $null
+  }
+
+  $rows = @(Import-Csv $Path)
+  if ($rows.Count -eq 0) {
+    return $null
+  }
+
+  $availableColumns = @($rows[0].PSObject.Properties.Name)
+  $predictionColumn = $PredictionColumns | Where-Object { $_ -in $availableColumns } | Select-Object -First 1
+  if (-not $predictionColumn -or -not ("y_true" -in $availableColumns)) {
+    return $null
+  }
+
+  $correct = 0
+  foreach ($row in $rows) {
+    if ($row.y_true -eq $row.$predictionColumn) {
+      $correct++
+    }
+  }
+
+  $sampleCount = $rows.Count
+  $accuracyPct = if ($sampleCount -gt 0) {
+    [math]::Round((100.0 * $correct / $sampleCount), 2)
+  } else {
+    $null
+  }
+
+  return [PSCustomObject]@{
+    CorrectCount = "$correct/$sampleCount"
+    AccuracyPct = $accuracyPct
+    SampleCount = $sampleCount
+  }
+}
+
 function Get-CsvHeaderColumns {
   param(
     [Parameter(Mandatory = $true)][string]$Path
@@ -157,9 +194,9 @@ function Ensure-RunResultsCsvSchema {
   $archiveFile = Join-Path $resultsDir ("run_results_soft_adaptatif_legacy_{0}.csv" -f $Timestamp.ToString("yyyyMMdd_HHmmss"))
   Move-Item -LiteralPath $CsvFile -Destination $archiveFile
   Write-Host ""
-  Write-Host "Schema CSV historique detecte."
-  Write-Host "  Ancien fichier archive : $archiveFile"
-  Write-Host "  Nouveau fichier cree   : $CsvFile"
+  Write-Host "Legacy CSV schema detected."
+  Write-Host "  Archived previous file : $archiveFile"
+  Write-Host "  New file created       : $CsvFile"
 }
 
 function Write-RunResultsCsvRow {
@@ -185,9 +222,9 @@ function Write-RunResultsCsvRow {
         Move-Item -LiteralPath $CsvFile -Destination $archiveFile -Force
       }
       Write-Host ""
-      Write-Host "Incompatibilite CSV detectee pendant l'export."
-      Write-Host "  Ancien fichier archive : $archiveFile"
-      Write-Host "  Reinitialisation du CSV: $CsvFile"
+      Write-Host "CSV incompatibility detected during export."
+      Write-Host "  Archived previous file : $archiveFile"
+      Write-Host "  CSV reset              : $CsvFile"
 
       $Row | Export-Csv -Path $CsvFile -NoTypeInformation
       return
@@ -204,26 +241,26 @@ function Select-DatasetName {
   if ($RequestedDataset) {
     $selected = $datasetMenu | Where-Object { $_.Name -eq $RequestedDataset }
     if (-not $selected) {
-      throw "Dataset inconnu : $RequestedDataset. Valeurs possibles : $($datasetMenu.Name -join ', ')"
+      throw "Unknown dataset: $RequestedDataset. Available values: $($datasetMenu.Name -join ', ')"
     }
     return $selected.Name
   }
 
   Write-Host ""
-  Write-Host "Datasets disponibles :"
+  Write-Host "Available datasets:"
   foreach ($entry in $datasetMenu) {
     Write-Host ("  [{0}] {1}" -f $entry.Id, $entry.Name)
   }
 
-  $choiceText = Read-Host "Choisissez un dataset (numero)"
+  $choiceText = Read-Host "Choose a dataset (number)"
   $choice = 0
   if (-not [int]::TryParse($choiceText, [ref]$choice)) {
-    throw "Choix invalide : entrez un numero."
+    throw "Invalid choice: enter a number."
   }
 
   $selected = $datasetMenu | Where-Object { $_.Id -eq $choice }
   if (-not $selected) {
-    throw "Choix hors intervalle."
+    throw "Choice out of range."
   }
 
   return $selected.Name
@@ -252,28 +289,6 @@ function Get-SpecialDatasetDirectory {
         (Join-Path $dataDir "Sortinghat_rust_pdte\steel")
       )
     }
-    "spam" {
-      @(
-        (Join-Path $dataDir "Sortinghat_rust_pdte\spam")
-      )
-    }
-    "spam2" {
-      @(
-        (Join-Path $dataDir "Sortinghat_rust_pdte\spam2")
-      )
-    }
-    "fake_art" {
-      @(
-        (Join-Path $dataDir "Sortinghat_rust_pdte\fake_art"),
-        (Join-Path $dataDir "data_sortinghat_run_pdt\fake_art")
-      )
-    }
-    "fake_hou" {
-      @(
-        (Join-Path $dataDir "Sortinghat_rust_pdte\fake_hou"),
-        (Join-Path $dataDir "data_sortinghat_run_pdt\fake_hou")
-      )
-    }
     default {
       @()
     }
@@ -287,7 +302,7 @@ function Get-SpecialDatasetDirectory {
     }
   }
 
-  throw "Dataset special introuvable : $Name"
+  throw "Special dataset not found: $Name"
 }
 
 function Get-StandardDatasetMetadata {
@@ -297,8 +312,8 @@ function Get-StandardDatasetMetadata {
 
   $trainPath = Join-Path $dataDir "${Prefix}_train.csv"
   $testPath = Join-Path $dataDir "${Prefix}_test.csv"
-  if (-not (Test-Path $trainPath)) { throw "Train CSV introuvable : $trainPath" }
-  if (-not (Test-Path $testPath)) { throw "Test CSV introuvable : $testPath" }
+  if (-not (Test-Path $trainPath)) { throw "Training CSV not found: $trainPath" }
+  if (-not (Test-Path $testPath)) { throw "Test CSV not found: $testPath" }
 
   $header = (Get-Content $trainPath -TotalCount 1).Trim()
   $featureCount = ($header -split ",").Count - 1
@@ -312,10 +327,10 @@ function Get-StandardDatasetMetadata {
   $existingModelJson = Join-Path $dataDir "tree.json"
 
   if (-not (Test-Path $existingModelCsv)) {
-    throw "Arbre deja entraine introuvable : $existingModelCsv. Lance d'abord l'entrainement/export, puis relance l'inference."
+    throw "Pre-trained tree not found: $existingModelCsv. Run training/export first, then retry inference."
   }
   if (-not (Test-Path $existingTestData)) {
-    throw "Jeu de test exporte introuvable : $existingTestData. Lance d'abord l'entrainement/export, puis relance l'inference."
+    throw "Exported test set not found: $existingTestData. Run training/export first, then retry inference."
   }
 
   Write-Host ""
@@ -325,7 +340,7 @@ function Get-StandardDatasetMetadata {
     Write-Host "  Modele JSON         : $existingModelJson"
   }
   Write-Host "  Donnees de test     : $existingTestData"
-  Write-Host "  Aucun entrainement ne sera lance."
+  Write-Host "  No training step will be launched."
 
   return [PSCustomObject]@{
     Features = $featureCount
@@ -368,7 +383,7 @@ function Get-DatasetExecutionPlan {
 
   $selected = $datasetMenu | Where-Object { $_.Name -eq $Name }
   if (-not $selected) {
-    throw "Dataset inconnu : $Name"
+    throw "Unknown dataset: $Name"
   }
 
   if ($selected.Type -eq "standard") {
@@ -399,7 +414,7 @@ function Ensure-PodmanImage {
   )
 
   if ($buildResult.ExitCode -ne 0) {
-    throw "Echec podman build (code $($buildResult.ExitCode))."
+    throw "Podman build failed (code $($buildResult.ExitCode))."
   }
 }
 
@@ -423,7 +438,7 @@ function Ensure-Binaries {
   )
 
   if ($compileResult.ExitCode -ne 0) {
-    throw "Echec compilation CMake/Podman (code $($compileResult.ExitCode))."
+    throw "CMake/Podman compilation failed (code $($compileResult.ExitCode))."
   }
 }
 
@@ -443,7 +458,7 @@ function Train-StandardDataset {
   )
 
   if ($trainResult.ExitCode -ne 0) {
-    throw "Echec train_and_export.py (code $($trainResult.ExitCode))."
+    throw "train_and_export.py failed (code $($trainResult.ExitCode))."
   }
 }
 
@@ -458,7 +473,7 @@ function Run-ClearInference {
   )
 
   Write-Host ""
-  Write-Host "===== Resultats poc_clear ====="
+  Write-Host "===== poc_clear results ====="
   $result = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
     "run", "--rm",
     "-e", "POC_RESULTS_DIR=/workspace/results",
@@ -471,7 +486,7 @@ function Run-ClearInference {
   )
 
   if ($result.ExitCode -ne 0) {
-    throw "Echec poc_clear (code $($result.ExitCode))."
+    throw "poc_clear failed (code $($result.ExitCode))."
   }
 
   return $result.Text
@@ -488,7 +503,7 @@ function Run-HeInference {
   )
 
   Write-Host ""
-  Write-Host "===== Resultats poc_he ====="
+  Write-Host "===== poc_he results ====="
   $result = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
     "run", "--rm",
     "-e", "POC_RESULTS_DIR=/workspace/results",
@@ -501,7 +516,7 @@ function Run-HeInference {
   )
 
   if ($result.ExitCode -ne 0) {
-    throw "Echec poc_he (code $($result.ExitCode))."
+    throw "poc_he failed (code $($result.ExitCode))."
   }
 
   return $result.Text
@@ -511,19 +526,21 @@ function Print-FinalSummary {
   param(
     [Parameter(Mandatory = $true)][string]$DatasetName,
     [Parameter(Mandatory = $true)][string]$ClearText,
-    [Parameter(Mandatory = $true)][string]$HeText
+    [Parameter(Mandatory = $true)][string]$HeText,
+    [string]$ClearDetailsFile,
+    [string]$HeDetailsFile
   )
 
-  $metrics = Get-RunMetrics -DatasetName $DatasetName -ClearText $ClearText -HeText $HeText
+  $metrics = Get-RunMetrics -DatasetName $DatasetName -ClearText $ClearText -HeText $HeText -ClearDetailsFile $ClearDetailsFile -HeDetailsFile $HeDetailsFile
 
   Write-Host ""
   Write-Host "================ Resume final ================"
   Write-Host "Dataset                    : $DatasetName"
-  Write-Host "Inference hard (clair)     : $(if ($metrics.clear_hard_correct_count -and $metrics.clear_hard_accuracy_pct -ne $null) { "$($metrics.clear_hard_correct_count) - $($metrics.clear_hard_accuracy_pct)%" } else { 'n/a' })"
-  Write-Host "Inference soft global      : $(if ($metrics.clear_soft_global_correct_count -and $metrics.clear_soft_global_accuracy_pct -ne $null) { "$($metrics.clear_soft_global_correct_count) - $($metrics.clear_soft_global_accuracy_pct)%" } else { 'n/a' })"
-  Write-Host "Inference soft adaptatif   : $(if ($metrics.clear_soft_adaptive_correct_count -and $metrics.clear_soft_adaptive_accuracy_pct -ne $null) { "$($metrics.clear_soft_adaptive_correct_count) - $($metrics.clear_soft_adaptive_accuracy_pct)%" } else { 'n/a' })"
-  Write-Host "Inference HE soft global   : $(if ($metrics.he_soft_global_correct_count -and $metrics.he_soft_global_accuracy_pct -ne $null) { "$($metrics.he_soft_global_correct_count) - $($metrics.he_soft_global_accuracy_pct)%" } elseif ($metrics.he_soft_global_status -eq 'failed') { "echec - $($metrics.he_soft_global_error)" } elseif ($metrics.he_output_detected) { 'sortie non parsee' } else { 'n/a (ancienne sortie ou rebuild manquant)' })"
-  Write-Host "Inference HE adaptatif     : $(if ($metrics.he_soft_adaptive_correct_count -and $metrics.he_soft_adaptive_accuracy_pct -ne $null) { "$($metrics.he_soft_adaptive_correct_count) - $($metrics.he_soft_adaptive_accuracy_pct)%" } elseif ($metrics.he_soft_adaptive_status -eq 'failed') { "echec - $($metrics.he_soft_adaptive_error)" } elseif ($metrics.he_output_detected) { 'sortie non parsee' } else { 'n/a (ancienne sortie ou rebuild manquant)' })"
+  Write-Host "Hard inference (clear)     : $(if ($metrics.clear_hard_correct_count -and $metrics.clear_hard_accuracy_pct -ne $null) { "$($metrics.clear_hard_correct_count) - $($metrics.clear_hard_accuracy_pct)%" } else { 'n/a' })"
+  Write-Host "Soft global inference      : $(if ($metrics.clear_soft_global_correct_count -and $metrics.clear_soft_global_accuracy_pct -ne $null) { "$($metrics.clear_soft_global_correct_count) - $($metrics.clear_soft_global_accuracy_pct)%" } else { 'n/a' })"
+  Write-Host "Soft adaptive inference    : $(if ($metrics.clear_soft_adaptive_correct_count -and $metrics.clear_soft_adaptive_accuracy_pct -ne $null) { "$($metrics.clear_soft_adaptive_correct_count) - $($metrics.clear_soft_adaptive_accuracy_pct)%" } else { 'n/a' })"
+  Write-Host "HE soft global inference   : $(if ($metrics.he_soft_global_correct_count -and $metrics.he_soft_global_accuracy_pct -ne $null) { "$($metrics.he_soft_global_correct_count) - $($metrics.he_soft_global_accuracy_pct)%" } elseif ($metrics.he_soft_global_status -eq 'failed') { "failed - $($metrics.he_soft_global_error)" } elseif ($metrics.he_output_detected) { 'unparsed output' } else { 'n/a (legacy output or rebuild missing)' })"
+  Write-Host "HE soft adaptive inference : $(if ($metrics.he_soft_adaptive_correct_count -and $metrics.he_soft_adaptive_accuracy_pct -ne $null) { "$($metrics.he_soft_adaptive_correct_count) - $($metrics.he_soft_adaptive_accuracy_pct)%" } elseif ($metrics.he_soft_adaptive_status -eq 'failed') { "failed - $($metrics.he_soft_adaptive_error)" } elseif ($metrics.he_output_detected) { 'unparsed output' } else { 'n/a (legacy output or rebuild missing)' })"
 
   return $metrics
 }
@@ -532,35 +549,80 @@ function Get-RunMetrics {
   param(
     [Parameter(Mandatory = $true)][string]$DatasetName,
     [Parameter(Mandatory = $true)][string]$ClearText,
-    [Parameter(Mandatory = $true)][string]$HeText
+    [Parameter(Mandatory = $true)][string]$HeText,
+    [string]$ClearDetailsFile,
+    [string]$HeDetailsFile
   )
 
-  $hardClearCount = Get-RegexValue -Text $ClearText -Pattern "Hard \(clair\)\s*:\s*([0-9]+/[0-9]+)"
-  $hardClear = Get-RegexValue -Text $ClearText -Pattern "Hard \(clair\)\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
-  $softGlobalClearCount = Get-RegexValue -Text $ClearText -Pattern "Soft global \(clair\)\s*:\s*([0-9]+/[0-9]+)"
-  $softGlobalClear = Get-RegexValue -Text $ClearText -Pattern "Soft global \(clair\)\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
-  $softClearCount = Get-RegexValue -Text $ClearText -Pattern "Soft adaptatif \(clair\)\s*:\s*([0-9]+/[0-9]+)"
-  $softClear = Get-RegexValue -Text $ClearText -Pattern "Soft adaptatif \(clair\)\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
+  $hardClearCount = Get-RegexValue -Text $ClearText -Pattern "Hard \((?:clear|clair)\)\s*:\s*([0-9]+/[0-9]+)"
+  $hardClear = Get-RegexValue -Text $ClearText -Pattern "Hard \((?:clear|clair)\)\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
+  $softGlobalClearCount = Get-RegexValue -Text $ClearText -Pattern "Soft global \((?:clear|clair)\)\s*:\s*([0-9]+/[0-9]+)"
+  $softGlobalClear = Get-RegexValue -Text $ClearText -Pattern "Soft global \((?:clear|clair)\)\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
+  $softClearCount = Get-RegexValue -Text $ClearText -Pattern "Soft (?:adaptive|adaptatif) \((?:clear|clair)\)\s*:\s*([0-9]+/[0-9]+)"
+  $softClear = Get-RegexValue -Text $ClearText -Pattern "Soft (?:adaptive|adaptatif) \((?:clear|clair)\)\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
   $softHeGlobalCount = Get-RegexValue -Text $HeText -Pattern "HE Soft global\s*:\s*([0-9]+/[0-9]+)"
   $softHeGlobal = Get-RegexValue -Text $HeText -Pattern "HE Soft global\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
   $softHeGlobalAvgMs = Get-RegexValue -Text $HeText -Pattern "HE Soft global\s*:\s*[0-9]+/[0-9]+\s*-\s*[0-9]+(?:\.[0-9]+)?%\s*([0-9]+(?:\.[0-9]+)?)\s*ms/inf"
-  $softHeAdaptiveCount = Get-RegexValue -Text $HeText -Pattern "HE Soft adaptatif\s*:\s*([0-9]+/[0-9]+)"
-  $softHeAdaptive = Get-RegexValue -Text $HeText -Pattern "HE Soft adaptatif\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
-  $softHeAdaptiveAvgMs = Get-RegexValue -Text $HeText -Pattern "HE Soft adaptatif\s*:\s*[0-9]+/[0-9]+\s*-\s*[0-9]+(?:\.[0-9]+)?%\s*([0-9]+(?:\.[0-9]+)?)\s*ms/inf"
-  $softHeGlobalFailed = [bool]($HeText -match "HE Soft global\s*:\s*echec")
-  $softHeAdaptiveFailed = [bool]($HeText -match "HE Soft adaptatif\s*:\s*echec")
-  $heOutputDetected = [bool]($HeText -match "Resultats - inference chiffree \(CKKS/SEAL\)")
+  $softHeAdaptiveCount = Get-RegexValue -Text $HeText -Pattern "HE Soft (?:adaptive|adaptatif)\s*:\s*([0-9]+/[0-9]+)"
+  $softHeAdaptive = Get-RegexValue -Text $HeText -Pattern "HE Soft (?:adaptive|adaptatif)\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
+  $softHeAdaptiveAvgMs = Get-RegexValue -Text $HeText -Pattern "HE Soft (?:adaptive|adaptatif)\s*:\s*[0-9]+/[0-9]+\s*-\s*[0-9]+(?:\.[0-9]+)?%\s*([0-9]+(?:\.[0-9]+)?)\s*ms/inf"
+  $softHeGlobalFailed = [bool]($HeText -match "HE Soft global\s*:\s*failed")
+  $softHeAdaptiveFailed = [bool]($HeText -match "HE Soft (?:adaptive|adaptatif)\s*:\s*failed")
+  $heOutputDetected = [bool]($HeText -match "(?:Results - encrypted inference|Resultats - inference chiffree) \(CKKS/SEAL\)")
   $globalError = $null
   $adaptiveError = $null
-  if ($HeText -match "HE Soft global\s*:\s*echec\s*\r?\n\s*Raison\s*:\s*(.+)") {
+  if ($HeText -match "HE Soft global\s*:\s*failed\s*\r?\n\s*Reason\s*:\s*(.+)") {
     $globalError = $matches[1].Trim()
   }
-  if ($HeText -match "HE Soft adaptatif\s*:\s*echec\s*\r?\n\s*Raison\s*:\s*(.+)") {
+  if ($HeText -match "HE Soft (?:adaptive|adaptatif)\s*:\s*failed\s*\r?\n\s*Reason\s*:\s*(.+)") {
     $adaptiveError = $matches[1].Trim()
   }
   $clearSamples = Get-RegexValue -Text $ClearText -Pattern "Samples\s*:\s*([0-9]+)"
   $heSamples = Get-RegexValue -Text $HeText -Pattern "Samples\s*:\s*([0-9]+)"
   $heMultDepth = Get-RegexValue -Text $HeText -Pattern "Mult\.\s*depth\s*:\s*([0-9]+)"
+
+  $clearHardCsvMetrics = Get-PredictionMetricsFromCsv -Path $ClearDetailsFile -PredictionColumns @("pred_hard")
+  $clearSoftGlobalCsvMetrics = Get-PredictionMetricsFromCsv -Path $ClearDetailsFile -PredictionColumns @("pred_soft_global")
+  $clearSoftAdaptiveCsvMetrics = Get-PredictionMetricsFromCsv -Path $ClearDetailsFile -PredictionColumns @("pred_soft_adaptive", "pred_soft_adaptatif")
+  $heSoftGlobalCsvMetrics = Get-PredictionMetricsFromCsv -Path $HeDetailsFile -PredictionColumns @("pred_soft_global_ckks")
+  $heSoftAdaptiveCsvMetrics = Get-PredictionMetricsFromCsv -Path $HeDetailsFile -PredictionColumns @("pred_soft_adaptive_ckks", "pred_soft_adaptatif_ckks")
+
+  if (-not $hardClearCount -and $clearHardCsvMetrics) {
+    $hardClearCount = $clearHardCsvMetrics.CorrectCount
+  }
+  if ($hardClear -eq $null -and $clearHardCsvMetrics) {
+    $hardClear = [string]$clearHardCsvMetrics.AccuracyPct
+  }
+  if (-not $softGlobalClearCount -and $clearSoftGlobalCsvMetrics) {
+    $softGlobalClearCount = $clearSoftGlobalCsvMetrics.CorrectCount
+  }
+  if ($softGlobalClear -eq $null -and $clearSoftGlobalCsvMetrics) {
+    $softGlobalClear = [string]$clearSoftGlobalCsvMetrics.AccuracyPct
+  }
+  if (-not $softClearCount -and $clearSoftAdaptiveCsvMetrics) {
+    $softClearCount = $clearSoftAdaptiveCsvMetrics.CorrectCount
+  }
+  if ($softClear -eq $null -and $clearSoftAdaptiveCsvMetrics) {
+    $softClear = [string]$clearSoftAdaptiveCsvMetrics.AccuracyPct
+  }
+  if (-not $softHeGlobalCount -and $heSoftGlobalCsvMetrics) {
+    $softHeGlobalCount = $heSoftGlobalCsvMetrics.CorrectCount
+  }
+  if ($softHeGlobal -eq $null -and $heSoftGlobalCsvMetrics) {
+    $softHeGlobal = [string]$heSoftGlobalCsvMetrics.AccuracyPct
+  }
+  if (-not $softHeAdaptiveCount -and $heSoftAdaptiveCsvMetrics) {
+    $softHeAdaptiveCount = $heSoftAdaptiveCsvMetrics.CorrectCount
+  }
+  if ($softHeAdaptive -eq $null -and $heSoftAdaptiveCsvMetrics) {
+    $softHeAdaptive = [string]$heSoftAdaptiveCsvMetrics.AccuracyPct
+  }
+  if (-not $clearSamples -and $clearHardCsvMetrics) {
+    $clearSamples = [string]$clearHardCsvMetrics.SampleCount
+  }
+  if (-not $heSamples -and $heSoftGlobalCsvMetrics) {
+    $heSamples = [string]$heSoftGlobalCsvMetrics.SampleCount
+  }
 
   return [PSCustomObject]@{
     dataset = $DatasetName
@@ -616,10 +678,10 @@ features: $Features
 classes: $Classes
 samples_requested: $SampleCount
 
-===== Resultats poc_clear =====
+===== poc_clear results =====
 $ClearText
 
-===== Resultats poc_he =====
+===== poc_he results =====
 $HeText
 
 clear_predictions_file: $clearDetailsFile
@@ -656,7 +718,7 @@ he_predictions_file: $heDetailsFile
   Write-RunResultsCsvRow -CsvFile $csvFile -Row $row -Timestamp $timestamp
 
   Write-Host ""
-  Write-Host "Resultats enregistres :"
+  Write-Host "Saved results:"
   Write-Host "  CSV : $csvFile"
   Write-Host "  Log : $logFile"
 }
@@ -665,11 +727,11 @@ $selectedDataset = Select-DatasetName -RequestedDataset $Dataset
 $plan = Get-DatasetExecutionPlan -Name $selectedDataset
 
 Write-Host ""
-Write-Host "Dataset selectionne : $($plan.Name)"
+Write-Host "Selected dataset    : $($plan.Name)"
 Write-Host "Type                : $($plan.Type)"
 Write-Host "Features            : $($plan.Features)"
 Write-Host "Classes             : $($plan.Classes)"
-Write-Host "Samples evalues     : $SampleCount"
+Write-Host "Evaluated samples   : $SampleCount"
 
 Ensure-PodmanImage
 Ensure-Binaries
@@ -682,5 +744,5 @@ $heDetailedResultsFile = "/workspace/results/logs/run_{0}_{1}_he_predictions.csv
 $clearText = Run-ClearInference -DatasetName $plan.Name -DetailedResultsFile $clearDetailedResultsFile -ModelPath $plan.ModelPath -Features $plan.Features -Classes $plan.Classes -SampleCount $SampleCount
 $heText = Run-HeInference -DatasetName $plan.Name -DetailedResultsFile $heDetailedResultsFile -ModelPath $plan.ModelPath -Features $plan.Features -Classes $plan.Classes -SampleCount $SampleCount
 
-$metrics = Print-FinalSummary -DatasetName $plan.Name -ClearText $clearText -HeText $heText
+$metrics = Print-FinalSummary -DatasetName $plan.Name -ClearText $clearText -HeText $heText -ClearDetailsFile ("results/logs/run_{0}_{1}_clear_predictions.csv" -f $plan.Name, $timestampFile) -HeDetailsFile ("results/logs/run_{0}_{1}_he_predictions.csv" -f $plan.Name, $timestampFile)
 Save-RunArtifacts -Timestamp $runTimestamp -ClearDetailsFile ("results/logs/run_{0}_{1}_clear_predictions.csv" -f $plan.Name, $timestampFile) -HeDetailsFile ("results/logs/run_{0}_{1}_he_predictions.csv" -f $plan.Name, $timestampFile) -DatasetName $plan.Name -Features $plan.Features -Classes $plan.Classes -SampleCount $SampleCount -Metrics $metrics -ClearText $clearText -HeText $heText

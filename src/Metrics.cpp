@@ -26,7 +26,7 @@ void printClassificationReport(const std::vector<int>& y_true,
     cm.print();
 
     // Precision, recall, F1 par classe
-    std::cout << "\n  Classe  Precision  Recall   F1\n";
+    std::cout << "\n  Class   Precision  Recall   F1\n";
     std::cout << "  ------  ---------  ------  ------\n";
     for (int c = 0; c < nb_classes; ++c) {
         int tp = cm.matrix[c][c];
@@ -55,7 +55,7 @@ void printAccuracyVsDegree(
     const std::vector<int>& degrees,
     std::function<int(const std::vector<double>&, int)> predict_fn) {
 
-    std::cout << "\n  Degré   Précision   Mult.Depth\n";
+    std::cout << "\n  Degree  Accuracy    Mult.Depth\n";
     std::cout << "  -----   ---------   ----------\n";
 
     for (int deg : degrees) {
@@ -86,9 +86,9 @@ void printClearVsHEComparison(
 
     std::cout << "\n";
     std::cout << "  ┌──────────────────────────────────────────────────────────┐\n";
-    std::cout << "  │           COMPARAISON FINALE : CLAIR vs CHIFFRÉ          │\n";
+    std::cout << "  │           FINAL COMPARISON: CLEAR vs ENCRYPTED           │\n";
     std::cout << "  ├──────────────────────┬───────────┬───────────┬───────────┤\n";
-    std::cout << "  │ Mode                 │ Précision │ Temps     │ Depth HE  │\n";
+    std::cout << "  │ Mode                 │ Accuracy  │ Time      │ HE Depth  │\n";
     std::cout << "  ├──────────────────────┼───────────┼───────────┼───────────┤\n";
 
     auto row = [](const std::string& name, double acc,
@@ -100,13 +100,13 @@ void printClearVsHEComparison(
                   << " │ " << std::setw(9) << depth << " │\n";
     };
 
-    row("Hard (baseline)",    acc_hard,           "N/A",  "0 (clair)");
-    row("Soft global clair",  acc_soft_global,    "N/A",  "0 (clair)");
-    row("Soft adapt. clair",  acc_soft_adaptive,  "N/A",  "0 (clair)");
+    row("Hard (baseline)",     acc_hard,           "N/A",  "0 (clear)");
+    row("Soft global clear",   acc_soft_global,    "N/A",  "0 (clear)");
+    row("Soft adaptive clear", acc_soft_adaptive,  "N/A",  "0 (clear)");
     row("HE soft global",     acc_he_global,
         std::to_string((int)time_he_global_ms) + " ms",
         std::to_string(he_mult_depth));
-    row("HE soft adaptatif",  acc_he_adaptive,
+    row("HE soft adaptive",   acc_he_adaptive,
         std::to_string((int)time_he_adaptive_ms) + " ms",
         std::to_string(he_mult_depth));
 
@@ -115,7 +115,7 @@ void printClearVsHEComparison(
     // Perte de precision clair -> HE
     double loss_global   = acc_soft_global   - acc_he_global;
     double loss_adaptive = acc_soft_adaptive - acc_he_adaptive;
-    std::cout << "\n  Perte due au chiffrement :\n"
+    std::cout << "\n  Loss due to encryption:\n"
               << "    Global   : " << std::setprecision(2) << loss_global   << " pts\n"
-              << "    Adaptatif: " << loss_adaptive << " pts\n";
+              << "    Adaptive : " << loss_adaptive << " pts\n";
 }

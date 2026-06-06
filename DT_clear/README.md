@@ -45,7 +45,7 @@ The CLI can be build using
 
 Without any command line arguments, the CLI will simulate decision tree evaluation
 using complete binary trees of various depths.
-When given a command line argument of a data directory such as `data/heart` or `data/spam`,
+When given a command line argument of a data directory such as `data/heart`,
 the CLI will evaluation a real model
 trained using the training script located in `script/train.py`.
 Some models are included in the `data` directory.

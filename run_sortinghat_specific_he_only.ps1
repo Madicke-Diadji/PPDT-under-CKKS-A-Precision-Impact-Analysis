@@ -17,7 +17,7 @@ function Ensure-Directory {
 function Assert-RequiredFile {
   param([Parameter(Mandatory = $true)][string]$Path)
   if (-not (Test-Path $Path)) {
-    throw "Fichier requis introuvable : $Path"
+    throw "Required file not found: $Path"
   }
 }
 
@@ -179,7 +179,7 @@ function Resolve-DatasetTargets {
     } | Select-Object -ExpandProperty FullName
 
     $available = $allCandidates | ForEach-Object { Get-DisplayDatasetKey -DatasetDir $_ -DataRoot $DataRoot } | Sort-Object -Unique
-    throw "Dataset introuvable pour '$InputName'. Jeux de donnees disponibles : $($available -join ', ')"
+    throw "Dataset not found for '$InputName'. Available datasets: $($available -join ', ')"
   }
 
   $directModel = Join-Path $resolvedPath "model.json"
@@ -196,7 +196,7 @@ function Resolve-DatasetTargets {
   } | Sort-Object FullName | Select-Object -ExpandProperty FullName
 
   if (-not $children) {
-    throw "Aucun dataset exploitable trouve dans : $resolvedPath"
+    throw "No usable dataset found in: $resolvedPath"
   }
 
   return @($children)
@@ -208,15 +208,15 @@ function Parse-HeMetrics {
     [Parameter(Mandatory = $true)][string]$HeText
   )
 
-  $RunData.he_batch_precision_pct = Get-RegexValue -Text $HeText -Pattern "Precision HE adaptee\s*:\s*([0-9]+(?:\.[0-9]+)?)%"
+  $RunData.he_batch_precision_pct = Get-RegexValue -Text $HeText -Pattern "HE Soft adaptive\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
   if ($HeText -match "([0-9]+)\s+errors out of\s+([0-9]+)") {
     $RunData.he_batch_errors = $matches[1]
     $RunData.he_batch_tests = $matches[2]
   }
 
-  $RunData.he_client_encrypt_ms = Get-RegexValue -Text $HeText -Pattern "Temps client chiffrement\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
-  $RunData.he_server_inference_ms = Get-RegexValue -Text $HeText -Pattern "Temps serveur inference\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
-  $RunData.he_client_decrypt_ms = Get-RegexValue -Text $HeText -Pattern "Temps client dechiffrement\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
+  $RunData.he_client_encrypt_ms = Get-RegexValue -Text $HeText -Pattern "Client encryption time\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
+  $RunData.he_server_inference_ms = Get-RegexValue -Text $HeText -Pattern "Server inference time\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
+  $RunData.he_client_decrypt_ms = Get-RegexValue -Text $HeText -Pattern "Client decryption time\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
   $RunData.he_setup_time_ms = Get-RegexValue -Text $HeText -Pattern "setup_time_ms=([0-9]+(?:\.[0-9]+)?)"
   $RunData.he_inference_time_ms = Get-RegexValue -Text $HeText -Pattern "inference_time_ms=([0-9]+(?:\.[0-9]+)?)"
   $RunData.he_inference_time_per_sample_ms = Get-RegexValue -Text $HeText -Pattern "inference_time_per_sample_ms=([0-9]+(?:\.[0-9]+)?)"
@@ -278,7 +278,7 @@ Ensure-Directory -Path $logsDir
 $datasetDirs = Resolve-DatasetTargets -InputName $Dataset -DataRoot $dataRoot
 
 Write-Host ""
-Write-Host "Datasets a executer :"
+Write-Host "Datasets to run:"
 foreach ($datasetDir in $datasetDirs) {
   Write-Host ("  - {0}" -f (Get-DisplayDatasetKey -DatasetDir $datasetDir -DataRoot $dataRoot))
 }
@@ -287,7 +287,7 @@ Write-Host "Build dir           : $BuildDir"
 
 if ($Rebuild -or -not (Test-Path (Join-Path $repoRoot $BuildDir))) {
   Write-Host ""
-  Write-Host "Compilation de poc_he soft_adaptatif dans le conteneur..."
+  Write-Host "Building soft-adaptive poc_he inside the container..."
   $buildArgs = @("run", "--rm") + @(
     "-v", "${repoRoot}:/workspace",
     "-w", "/workspace/src",
@@ -297,7 +297,7 @@ if ($Rebuild -or -not (Test-Path (Join-Path $repoRoot $BuildDir))) {
   $buildResult = Invoke-LoggedCommand -FilePath "podman" -Arguments $buildArgs
 
   if ($buildResult.ExitCode -ne 0) {
-    throw "Echec compilation poc_he (code $($buildResult.ExitCode))."
+    throw "poc_he build failed (code $($buildResult.ExitCode))."
   }
 }
 
@@ -352,7 +352,7 @@ foreach ($datasetDir in $datasetDirs) {
   $logLines.Add("Samples: $($metadata.Samples)")
 
   Write-Host ""
-  Write-Host "Lancement de l'inference HE pour : $datasetKey"
+  Write-Host "Running HE inference for: $datasetKey"
 
   try {
     $heArgs = @("run", "--rm") + @(
@@ -363,36 +363,36 @@ foreach ($datasetDir in $datasetDirs) {
     )
     $heResult = Invoke-LoggedCommand -FilePath "podman" -Arguments $heArgs
 
-    $logLines.Add("===== Resultats poc_he =====")
+    $logLines.Add("===== poc_he results =====")
     $heResult.Lines | ForEach-Object { $logLines.Add($_) }
 
     if ($heResult.ExitCode -ne 0) {
-      throw "Echec poc_he (code $($heResult.ExitCode))."
+      throw "poc_he failed (code $($heResult.ExitCode))."
     }
 
     Parse-HeMetrics -RunData $runData -HeText $heResult.Text
     if ($runData.he_status -ne "ok") {
-      $runData.error_message = "Les metriques attendues n'ont pas ete detectees dans la sortie de poc_he."
+      $runData.error_message = "Expected metrics were not detected in the poc_he output."
     }
   } catch {
     $runData.he_status = "failed"
     $runData.he_batch_status = "failed"
     $runData.error_message = $_.Exception.Message
-    Write-Host "Run en echec : $($runData.error_message)"
+    Write-Host "Run failed: $($runData.error_message)"
   } finally {
     Set-Content -Path $logFilePath -Value $logLines -Encoding UTF8
     Save-RunResults -RunData $runData -CsvPath $csvResultsPath
     [void]$runSummaries.Add([PSCustomObject]$runData)
-    Write-Host "Log enregistre : $logFilePath"
+    Write-Host "Log saved: $logFilePath"
   }
 }
 
 Write-Host ""
-Write-Host "Resume des executions :"
+Write-Host "Run summary:"
 foreach ($summary in $runSummaries) {
-  Write-Host ("  - {0} | statut={1} | precision={2}" -f `
+  Write-Host ("  - {0} | status={1} | accuracy={2}" -f `
     $summary.dataset, `
     $summary.he_status, `
     $(if ($summary.he_batch_precision_pct) { "$($summary.he_batch_precision_pct)%" } else { "n/a" }))
 }
-Write-Host "CSV resultats : $csvResultsPath"
+Write-Host "Results CSV: $csvResultsPath"

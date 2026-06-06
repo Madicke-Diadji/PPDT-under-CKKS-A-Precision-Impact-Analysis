@@ -81,7 +81,7 @@ function Get-BlockErrorMessage {
   )
 
   $escapedTitle = [regex]::Escape($Title)
-  $pattern = "(?s)Echec pour $escapedTitle\s*:\s*(.+?)(?:\r?\n\r?\n|$)"
+  $pattern = "(?s)Failure for $escapedTitle\s*:\s*(.+?)(?:\r?\n\r?\n|$)"
   return Get-RegexValue -Text $Text -Pattern $pattern
 }
 
@@ -171,7 +171,7 @@ function Export-ResultsToExcelXml {
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $fallbackPath = Join-Path $directory ("{0}_{1}{2}" -f $baseName, $timestamp, $extension)
     Set-Content -Path $fallbackPath -Value $content -Encoding UTF8
-    Write-Host "Fichier Excel verrouille, export ecrit dans : $fallbackPath"
+    Write-Host "Excel file is locked, export written to: $fallbackPath"
     return $fallbackPath
   }
 }
@@ -225,7 +225,7 @@ function Save-RunResults {
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $csvOutputPath = Join-Path $resultsDir ("run_results_{0}.csv" -f $timestamp)
     $row | Export-Csv -Path $csvOutputPath -NoTypeInformation -Encoding UTF8
-    Write-Host "Fichier CSV verrouille, export ecrit dans : $csvOutputPath"
+    Write-Host "CSV file is locked, export written to: $csvOutputPath"
   }
 
   $allRows = Import-Csv -Path $csvOutputPath
@@ -245,26 +245,26 @@ function Parse-RunMetrics {
   )
 
   $RunData.clear_samples = Get-RegexValue -Text $ClearText -Pattern "Samples\s*:\s*([0-9]+)"
-  $RunData.clear_hard_baseline_pct = Get-RegexValue -Text $ClearText -Pattern "Hard \(clair\)\s*:\s*([0-9]+(?:\.[0-9]+)?)%"
-  $RunData.clear_soft_adaptive_pct = Get-RegexValue -Text $ClearText -Pattern "Soft adaptatif \(clair\)\s*:\s*([0-9]+(?:\.[0-9]+)?)%"
+  $RunData.clear_hard_baseline_pct = Get-RegexValue -Text $ClearText -Pattern "Hard \(clear\)\s*:\s*([0-9]+(?:\.[0-9]+)?)%"
+  $RunData.clear_soft_adaptive_pct = Get-RegexValue -Text $ClearText -Pattern "Soft adaptive \(clear\)\s*:\s*([0-9]+(?:\.[0-9]+)?)%"
 
   $RunData.he_ground_truth = Get-RegexValue -Text $HeText -Pattern "Label ground-truth\s*:\s*([0-9]+)"
-  $RunData.he_prediction_hard_clear = Get-RegexValue -Text $HeText -Pattern "Prediction hard \(clair\)\s*:\s*([0-9]+)"
-  $RunData.he_prediction_final = Get-RegexValue -Text $HeText -Pattern "RESULTAT FINAL CLIENT \(apres dechiffrement\)\s*:\s*([0-9]+)"
+  $RunData.he_prediction_hard_clear = Get-RegexValue -Text $HeText -Pattern "Hard prediction \(clear\)\s*:\s*([0-9]+)"
+  $RunData.he_prediction_final = Get-RegexValue -Text $HeText -Pattern "FINAL CLIENT RESULT \(after decryption\)\s*:\s*([0-9]+)"
 
-  $encryptValues = Get-RegexValues -Text $HeText -Pattern "Temps client chiffrement\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
-  $serverValues = Get-RegexValues -Text $HeText -Pattern "Temps serveur inference\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
-  $decryptValues = Get-RegexValues -Text $HeText -Pattern "Temps client dechiffrement\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
+  $encryptValues = Get-RegexValues -Text $HeText -Pattern "Client encryption time\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
+  $serverValues = Get-RegexValues -Text $HeText -Pattern "Server inference time\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
+  $decryptValues = Get-RegexValues -Text $HeText -Pattern "Client decryption time\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
 
   if ($encryptValues.Count -gt 0) { $RunData.he_client_encrypt_ms = $encryptValues[0] }
   if ($serverValues.Count -gt 0) { $RunData.he_server_inference_ms = $serverValues[0] }
   if ($decryptValues.Count -gt 0) { $RunData.he_client_decrypt_ms = $decryptValues[0] }
 
-  $RunData.he_demo_total_ms = Get-RegexValue -Text $HeText -Pattern "Temps demo total\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
+  $RunData.he_demo_total_ms = Get-RegexValue -Text $HeText -Pattern "Total demo time\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*ms"
   $RunData.he_setup_time_ms = Get-RegexValue -Text $HeText -Pattern "setup_time_ms=([0-9]+(?:\.[0-9]+)?)"
   $RunData.he_inference_time_ms = Get-RegexValue -Text $HeText -Pattern "inference_time_ms=([0-9]+(?:\.[0-9]+)?)"
   $RunData.he_inference_time_per_sample_ms = Get-RegexValue -Text $HeText -Pattern "inference_time_per_sample_ms=([0-9]+(?:\.[0-9]+)?)"
-  $RunData.he_batch_precision_pct = Get-RegexValue -Text $HeText -Pattern "Precision HE adaptee\s*:\s*([0-9]+(?:\.[0-9]+)?)%"
+  $RunData.he_batch_precision_pct = Get-RegexValue -Text $HeText -Pattern "HE Soft adaptive\s*:\s*[0-9]+/[0-9]+\s*-\s*([0-9]+(?:\.[0-9]+)?)%"
   $RunData.he_batch_errors = Get-RegexValue -Text $HeText -Pattern "([0-9]+)\s+errors out of\s+([0-9]+)"
   if ($HeText -match "([0-9]+)\s+errors out of\s+([0-9]+)") {
     $RunData.he_batch_errors = $matches[1]
@@ -272,7 +272,7 @@ function Parse-RunMetrics {
   }
 
   $demoError = Get-BlockErrorMessage -Text $HeText -Title "DEMO HE ADAPTATIF"
-  $batchError = Get-RegexValue -Text $HeText -Pattern "\[main_he\] Echec du batch vertical packing :\s*(.+)"
+  $batchError = Get-RegexValue -Text $HeText -Pattern "\[main_he\] Vertical packed batch failed:\s*(.+)"
 
   if ($demoError) {
     $RunData.he_demo_status = "failed"
@@ -301,7 +301,7 @@ Ensure-Directory -Path $resultsDir
 Ensure-Directory -Path $logsDir
 $trainFiles = Get-ChildItem $dataDir -Filter "*_train.csv" | Sort-Object Name
 if (-not $trainFiles) {
-  throw "Aucun dataset *_train.csv n'a ete trouve dans le dossier data."
+  throw "No *_train.csv dataset was found in the data folder."
 }
 
 $datasets = @()
@@ -318,24 +318,24 @@ foreach ($trainFile in $trainFiles) {
 }
 
 if (-not $datasets) {
-  throw "Aucun couple train/test n'a ete trouve dans le dossier data."
+  throw "No train/test dataset pair was found in the data folder."
 }
 
 Write-Host ""
-Write-Host "Datasets disponibles :"
+Write-Host "Available datasets:"
 for ($i = 0; $i -lt $datasets.Count; $i++) {
   Write-Host ("  [{0}] {1}" -f ($i + 1), $datasets[$i].Name)
 }
 
-$choiceText = Read-Host "Choisissez un dataset (numero)"
+$choiceText = Read-Host "Choose a dataset (number)"
 $parsedChoice = 0
 if (-not [int]::TryParse($choiceText, [ref]$parsedChoice)) {
-  throw "Choix invalide : entrez un numero."
+  throw "Invalid choice: enter a number."
 }
 
 $choice = $parsedChoice
 if ($choice -lt 1 -or $choice -gt $datasets.Count) {
-  throw "Choix hors intervalle."
+  throw "Choice out of range."
 }
 
 $selected = $datasets[$choice - 1]
@@ -351,7 +351,7 @@ Import-Csv $selected.TestPath | ForEach-Object { $labels[$_.label] = $true }
 $nbClasses = $labels.Keys.Count
 
 Write-Host ""
-Write-Host "Dataset selectionne : $($selected.Name)"
+Write-Host "Selected dataset: $($selected.Name)"
 Write-Host "  Features : $nbFeatures"
 Write-Host "  Classes  : $nbClasses"
 
@@ -408,7 +408,7 @@ try {
   $logLines.Add("===== train_and_export =====")
   $trainResult.Lines | ForEach-Object { $logLines.Add($_) }
   if ($trainResult.ExitCode -ne 0) {
-    throw "Echec train_and_export.py (code $($trainResult.ExitCode))."
+    throw "train_and_export.py failed (code $($trainResult.ExitCode))."
   }
   $runData.train_status = "ok"
 
@@ -422,7 +422,7 @@ try {
   $logLines.Add("===== podman build =====")
   $buildResult.Lines | ForEach-Object { $logLines.Add($_) }
   if ($buildResult.ExitCode -ne 0) {
-    throw "Echec podman build (code $($buildResult.ExitCode))."
+    throw "Podman build failed (code $($buildResult.ExitCode))."
   }
 
   $compileResult = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
@@ -435,12 +435,12 @@ try {
   $logLines.Add("===== cmake build =====")
   $compileResult.Lines | ForEach-Object { $logLines.Add($_) }
   if ($compileResult.ExitCode -ne 0) {
-    throw "Echec compilation CMake/Podman (code $($compileResult.ExitCode))."
+    throw "CMake/Podman compilation failed (code $($compileResult.ExitCode))."
   }
   $runData.build_status = "ok"
 
   Write-Host ""
-  Write-Host "===== Resultats poc_clear ====="
+  Write-Host "===== poc_clear results ====="
   $clearResult = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
     "run", "--rm",
     "-v", "${projectRoot}:/workspace",
@@ -448,16 +448,16 @@ try {
     $imageName,
     "bash", "-lc", "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:`$LD_LIBRARY_PATH && $containerBuildDir/poc_clear /workspace/data/tree.csv $nbFeatures $nbClasses"
   )
-  $logLines.Add("===== Resultats poc_clear =====")
+  $logLines.Add("===== poc_clear results =====")
   $clearResult.Lines | ForEach-Object { $logLines.Add($_) }
   if ($clearResult.ExitCode -ne 0) {
     $runData.clear_status = "failed"
-    throw "Echec poc_clear (code $($clearResult.ExitCode))."
+    throw "poc_clear failed (code $($clearResult.ExitCode))."
   }
   $runData.clear_status = "ok"
 
   Write-Host ""
-  Write-Host "===== Resultats poc_he ====="
+  Write-Host "===== poc_he results ====="
   $heResult = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
     "run", "--rm",
     "-v", "${projectRoot}:/workspace",
@@ -465,11 +465,11 @@ try {
     $imageName,
     "bash", "-lc", "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:`$LD_LIBRARY_PATH && $containerBuildDir/poc_he /workspace/data/tree.csv $nbFeatures $nbClasses"
   )
-  $logLines.Add("===== Resultats poc_he =====")
+  $logLines.Add("===== poc_he results =====")
   $heResult.Lines | ForEach-Object { $logLines.Add($_) }
   if ($heResult.ExitCode -ne 0) {
     $runData.he_status = "failed"
-    throw "Echec poc_he (code $($heResult.ExitCode))."
+    throw "poc_he failed (code $($heResult.ExitCode))."
   }
 
   Parse-RunMetrics -RunData $runData -ClearText $clearResult.Text -HeText $heResult.Text
@@ -486,12 +486,12 @@ try {
   elseif ($runData.he_status -eq "pending") { $runData.he_status = "failed" }
 
   Write-Host ""
-  Write-Host "Run en echec : $($_.Exception.Message)"
+  Write-Host "Run failed: $($_.Exception.Message)"
 } finally {
   Set-Content -Path $logFilePath -Value $logLines -Encoding UTF8
   $resultPaths = Save-RunResults -RunData $runData
   Write-Host ""
-  Write-Host "Resultats enregistres dans :"
+  Write-Host "Saved results:"
   Write-Host "  CSV   : $($resultPaths.CsvPath)"
   Write-Host "  Excel : $($resultPaths.ExcelPath)"
   Write-Host "  Log   : $logFilePath"

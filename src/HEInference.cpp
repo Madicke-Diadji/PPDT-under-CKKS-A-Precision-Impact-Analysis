@@ -195,7 +195,7 @@ void HEInference::setupCKKS(int degree_global,
 
 void HEInference::precomputeModel() {
     if (!setupDone_) {
-        throw std::runtime_error("Appelez setupCKKS() d'abord.");
+        throw std::runtime_error("Call setupCKKS() first.");
     }
 
     const auto& blocks = layout_->getNodeBlocks();
@@ -226,7 +226,7 @@ void HEInference::precomputeModel() {
 
     concealTreeThresholds();
     layout_->concealThresholds();
-    std::cout << "[HEInference] Seuils du modele masques en clair apres pre-calcul.\n";
+    std::cout << "[HEInference] Plain model thresholds concealed after precomputation.\n";
 }
 
 seal::Plaintext HEInference::encodeVector(const std::vector<double>& values) const {
@@ -274,7 +274,7 @@ HEInference::HECiphertext HEInference::encryptZeroAt(
 int HEInference::chainIndex(const seal::parms_id_type& parms_id) const {
     auto data = context_->get_context_data(parms_id);
     if (!data) {
-        throw std::runtime_error("Niveau CKKS introuvable dans le contexte SEAL.");
+        throw std::runtime_error("CKKS level not found in the SEAL context.");
     }
     return static_cast<int>(data->chain_index());
 }
@@ -283,7 +283,7 @@ seal::parms_id_type HEInference::nextParmsId(
     const seal::parms_id_type& parms_id) const {
     auto data = context_->get_context_data(parms_id);
     if (!data || !data->next_context_data()) {
-        throw std::runtime_error("Aucun niveau CKKS suivant disponible.");
+        throw std::runtime_error("No next CKKS level available.");
     }
     return data->next_context_data()->parms_id();
 }
@@ -532,7 +532,7 @@ HEInference::HECiphertext HEInference::getPowerBSGS(
     int exponent,
     std::unordered_map<int, HECiphertext>& power_cache) const {
     if (exponent < 1) {
-        throw std::runtime_error("getPowerBSGS: exponent doit etre >= 1.");
+        throw std::runtime_error("getPowerBSGS: exponent must be >= 1.");
     }
 
     const auto it = power_cache.find(exponent);
@@ -785,7 +785,7 @@ HEInference::HECiphertext HEInference::inferenceEncrypted(
     const HECiphertext& ct_input,
     bool use_adaptive) const {
     if (!setupDone_) {
-        throw std::runtime_error("Appelez setupCKKS() puis precomputeModel().");
+        throw std::runtime_error("Call setupCKKS() and then precomputeModel().");
     }
 
     const auto& blocks = layout_->getNodeBlocks();
@@ -820,7 +820,7 @@ HEInference::HECiphertext HEInference::inferenceEncrypted(
 HEInference::HECiphertext HEInference::encryptInputBatch(
     const std::vector<std::vector<double>>& X) const {
     if (X.empty()) {
-        throw std::runtime_error("encryptInputBatch: batch vide.");
+        throw std::runtime_error("encryptInputBatch: empty batch.");
     }
 
     const int packed_samples = static_cast<int>(X.size());
@@ -844,10 +844,10 @@ HEInference::HECiphertext HEInference::inferenceEncryptedBatch(
     int packed_samples,
     bool use_adaptive) const {
     if (!setupDone_) {
-        throw std::runtime_error("Appelez setupCKKS() puis precomputeModel().");
+        throw std::runtime_error("Call setupCKKS() and then precomputeModel().");
     }
     if (packed_samples <= 0 || packed_samples > packedSamplesHint_) {
-        throw std::runtime_error("inferenceEncryptedBatch: packed_samples invalide.");
+        throw std::runtime_error("inferenceEncryptedBatch: invalid packed_samples value.");
     }
 
     const auto& blocks = layout_->getNodeBlocks();
@@ -968,7 +968,7 @@ HEInference::DemoTimings HEInference::runClientServerDemo(
     bool use_adaptive,
     bool verbose) const {
     if (!setupDone_) {
-        throw std::runtime_error("Appelez setupCKKS() puis precomputeModel().");
+        throw std::runtime_error("Call setupCKKS() and then precomputeModel().");
     }
 
     const auto& blocks = layout_->getNodeBlocks();
@@ -979,18 +979,18 @@ HEInference::DemoTimings HEInference::runClientServerDemo(
 
     if (verbose) {
         std::cout << "\n========================================================\n"
-                  << " DEMO CLIENT / SERVEUR - INFERENCE HE CKKS SUR 1 SAMPLE \n"
+                  << " CLIENT / SERVER DEMO - CKKS HE INFERENCE ON 1 SAMPLE \n"
                   << "========================================================\n";
     }
 
     if (verbose) {
-        std::cout << "\n[Client] Etape 1 - Preparation des donnees\n";
+        std::cout << "\n[Client] Step 1 - Data preparation\n";
         std::cout << "  x = [";
         for (size_t i = 0; i < x.size(); ++i) {
             std::cout << x[i] << (i + 1 < x.size() ? ", " : "");
         }
         std::cout << "]\n";
-        std::cout << "  Le client chiffre son vecteur dans un ciphertext CKKS/SEAL.\n";
+        std::cout << "  The client encrypts its vector into a CKKS/SEAL ciphertext.\n";
     }
 
     auto t_client_encrypt_0 = std::chrono::high_resolution_clock::now();
@@ -999,12 +999,12 @@ HEInference::DemoTimings HEInference::runClientServerDemo(
     timings.client_encrypt_ms = elapsedMs(t_client_encrypt_0, t_client_encrypt_1);
 
     if (verbose) {
-        std::cout << "  Ciphertext cree avec batch_size=" << batchSize_
-                  << " slots utiles.\n";
-        std::cout << "  Temps client chiffrement : "
+        std::cout << "  Ciphertext created with batch_size=" << batchSize_
+                  << " usable slots.\n";
+        std::cout << "  Client encryption time  : "
                   << timings.client_encrypt_ms << " ms\n";
-        std::cout << "\n[Serveur] Etape 2 - Traitement homomorphe du modele\n";
-        std::cout << "  Le serveur ne voit jamais x en clair.\n";
+        std::cout << "\n[Server] Step 2 - Homomorphic model evaluation\n";
+        std::cout << "  The server never sees x in the clear.\n";
     }
 
     auto t_server_0 = std::chrono::high_resolution_clock::now();
@@ -1013,10 +1013,10 @@ HEInference::DemoTimings HEInference::runClientServerDemo(
         const int degree = use_adaptive ? node_degrees_[i] : globalDeg_;
         const auto& block = blocks[i];
         if (verbose) {
-            std::cout << "  Noeud " << block.node_id
+            std::cout << "  Node " << block.node_id
                       << " : feature X[" << block.feature_index << "]"
-                      << ", seuil=<masque>"
-                      << ", degre_poly=" << degree << "\n";
+                      << ", threshold=<masked>"
+                      << ", poly_degree=" << degree << "\n";
         }
         ct_indicators[i] = evalNodeIndicator(
             ct_input,
@@ -1026,7 +1026,7 @@ HEInference::DemoTimings HEInference::runClientServerDemo(
     }
 
     if (verbose) {
-        std::cout << "  SumPath agrege les scores sur les feuilles candidates.\n";
+        std::cout << "  SumPath aggregates scores over the candidate leaves.\n";
     }
     auto ct_path_scores = sumPathEncrypted(ct_indicators);
 
@@ -1044,17 +1044,17 @@ HEInference::DemoTimings HEInference::runClientServerDemo(
 
     for (size_t leaf_idx = 0; leaf_idx < leaves.size() && leaf_idx < paths.size(); ++leaf_idx) {
         if (verbose) {
-            std::cout << "  Feuille " << leaves[leaf_idx].node_id
-                      << " : classe=" << leaves[leaf_idx].class_label
-                      << ", longueur_chemin=" << paths[leaf_idx].size() << "\n";
+            std::cout << "  Leaf " << leaves[leaf_idx].node_id
+                      << " : class=" << leaves[leaf_idx].class_label
+                      << ", path_length=" << paths[leaf_idx].size() << "\n";
         }
     }
 
     if (verbose) {
-        std::cout << "  Le serveur renvoie un ciphertext resultat au client.\n";
-        std::cout << "  Temps serveur inference : "
+        std::cout << "  The server returns a result ciphertext to the client.\n";
+        std::cout << "  Server inference time   : "
                   << timings.server_inference_ms << " ms\n";
-        std::cout << "\n[Client] Etape 3 - Dechiffrement final\n";
+        std::cout << "\n[Client] Step 3 - Final decryption\n";
     }
 
     auto t_client_decrypt_0 = std::chrono::high_resolution_clock::now();
@@ -1066,13 +1066,13 @@ HEInference::DemoTimings HEInference::runClientServerDemo(
         + timings.client_decrypt_ms;
 
     if (verbose) {
-        std::cout << "  Label predit apres dechiffrement : "
+        std::cout << "  Predicted label after decryption : "
                   << timings.pred_label << "\n";
-        std::cout << "  Temps client dechiffrement : "
+        std::cout << "  Client decryption time      : "
                   << timings.client_decrypt_ms << " ms\n";
-        std::cout << "  Temps total client->serveur->client : "
+        std::cout << "  Total client->server->client time : "
                   << timings.total_ms << " ms\n";
-        std::cout << "  La decision finale reste cote client.\n";
+        std::cout << "  The final decision remains on the client side.\n";
     }
 
     return timings;
@@ -1151,14 +1151,14 @@ HEInference::HEResults HEInference::evaluateEncrypted(
 
 void HEInference::printHEResults(const HEResults& r) const {
     std::cout << "\n==============================================\n"
-              << "  Resultats - inference chiffree (CKKS/SEAL)\n"
+              << "  Results - encrypted inference (CKKS/SEAL)\n"
               << "==============================================\n"
               << "  Samples           : " << r.nb_samples << "\n"
               << "  HE Soft global    : "
               << r.correct_he_global << "/" << r.nb_samples << " - "
               << std::fixed << std::setprecision(2) << r.accuracy_he_global
               << "%   " << r.avg_time_ms_global << " ms/inf\n"
-              << "  Soft adaptatif (chiffre) : "
+              << "  Soft adaptive (encrypted): "
               << r.correct_he_adaptive << "/" << r.nb_samples << " - "
               << r.accuracy_he_adaptive
               << "%   " << r.avg_time_ms_adaptive << " ms/inf\n"

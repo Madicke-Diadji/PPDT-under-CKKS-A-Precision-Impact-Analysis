@@ -6,7 +6,7 @@ et exporte sa structure au format CSV pour import dans le POC C++.
 Usage :
     python3 train_and_export.py --dataset iris --depth 4 --output ../data/tree.csv
 
-Formats d'export :
+Export formats:
     CSV : node_id, is_leaf, feature, threshold, left_id, right_id, class_label, min_gap
     JSON: arbre recursif (compatible TreeExporter::loadFromJSON)
 """
@@ -39,7 +39,7 @@ def load_uci_iris():
         "Iris-virginica": 2,
     }
 
-    print(f"Chargement Iris depuis UCI: {UCI_IRIS_URL}")
+    print(f"Loading Iris from UCI: {UCI_IRIS_URL}")
     with urllib.request.urlopen(UCI_IRIS_URL, timeout=30) as response:
         lines = response.read().decode("utf-8").splitlines()
 
@@ -50,7 +50,7 @@ def load_uci_iris():
             continue
         parts = line.split(",")
         if len(parts) != 5:
-            raise ValueError(f"Ligne Iris invalide: {line}")
+            raise ValueError(f"Invalid Iris row: {line}")
         X.append([float(v) for v in parts[:4]])
         y.append(label_to_id[parts[4]])
 
@@ -71,7 +71,7 @@ def load_dataset(name):
             random_state=42,
         )
         return X, y, [f"X{i}" for i in range(4)]
-    raise ValueError(f"Dataset inconnu: {name}")
+    raise ValueError(f"Unknown dataset: {name}")
 
 
 def load_local_csv_dataset(prefix):
@@ -79,16 +79,16 @@ def load_local_csv_dataset(prefix):
     test_path = f"{prefix}_test.csv"
 
     if not os.path.exists(train_path):
-        raise FileNotFoundError(f"Fichier train introuvable: {train_path}")
+        raise FileNotFoundError(f"Training file not found: {train_path}")
     if not os.path.exists(test_path):
-        raise FileNotFoundError(f"Fichier test introuvable: {test_path}")
+        raise FileNotFoundError(f"Test file not found: {test_path}")
 
     def read_one(path):
         with open(path, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader)
             if len(header) < 2:
-                raise ValueError(f"CSV invalide: {path}")
+                    raise ValueError(f"Invalid CSV: {path}")
             feature_names = header[1:]
             X = []
             y = []
@@ -103,9 +103,9 @@ def load_local_csv_dataset(prefix):
     X_test, y_test, test_feature_names = read_one(test_path)
 
     if feature_names != test_feature_names:
-        raise ValueError("Les headers train/test ne correspondent pas.")
+        raise ValueError("Train/test headers do not match.")
 
-    print(f"Chargement dataset local depuis {train_path} et {test_path}")
+    print(f"Loading local dataset from {train_path} and {test_path}")
     return X_train, X_test, y_train, y_test, feature_names
 
 
@@ -176,7 +176,7 @@ def export_csv(tree_clf, min_gaps, output_path, nb_classes):
         ])
         writer.writerows(rows)
 
-    print(f"Arbre exporte -> {output_path} ({n_nodes} noeuds)")
+    print(f"Tree exported -> {output_path} ({n_nodes} nodes)")
 
 
 def export_json(tree_clf, min_gaps, output_path, nb_classes):
@@ -212,20 +212,20 @@ def export_json(tree_clf, min_gaps, output_path, nb_classes):
     tree_dict = build_node(0)
     with open(output_path, "w") as f:
         json.dump(tree_dict, f, indent=2)
-    print(f"Arbre exporte -> {output_path}")
+    print(f"Tree exported -> {output_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Entraine + exporte un arbre de decision")
+    parser = argparse.ArgumentParser(description="Train and export a decision tree")
     parser.add_argument("--dataset", default="iris", choices=["iris", "breast_cancer", "synthetic"])
     parser.add_argument(
         "--data-prefix",
         default="",
-        help="Prefixe local pour charger data/<nom>_train.csv et data/<nom>_test.csv",
+        help="Local prefix used to load data/<name>_train.csv and data/<name>_test.csv",
     )
-    parser.add_argument("--depth", type=int, default=4, help="Profondeur max de l'arbre")
-    parser.add_argument("--output", default="../data/tree.csv", help="Fichier de sortie CSV")
-    parser.add_argument("--json", default="../data/tree.json", help="Fichier de sortie JSON")
+    parser.add_argument("--depth", type=int, default=4, help="Maximum tree depth")
+    parser.add_argument("--output", default="../data/tree.csv", help="CSV output file")
+    parser.add_argument("--json", default="../data/tree.json", help="JSON output file")
     args = parser.parse_args()
 
     if args.data_prefix:
@@ -242,8 +242,8 @@ def main():
     acc = clf.score(X_test, y_test)
     nb_classes = len(np.unique(np.concatenate((y_train, y_test))))
 
-    print(f"\nArbre entraîne : depth={args.depth}, n_nodes={clf.tree_.node_count}")
-    print(f"Précision test  : {acc * 100:.2f}%  ({len(y_test)} samples)")
+    print(f"\nTrained tree    : depth={args.depth}, n_nodes={clf.tree_.node_count}")
+    print(f"Test accuracy   : {acc * 100:.2f}%  ({len(y_test)} samples)")
     print(f"Features        : {list(feat_names)}")
     print(f"Classes         : {nb_classes}")
 
@@ -263,7 +263,7 @@ def main():
         writer.writerow(header)
         for xi, yi in zip(X_test, y_test):
             writer.writerow(list(xi) + [int(yi)])
-    print(f"Dataset test exporte -> {test_path}")
+    print(f"Test dataset exported -> {test_path}")
 
 
 if __name__ == "__main__":

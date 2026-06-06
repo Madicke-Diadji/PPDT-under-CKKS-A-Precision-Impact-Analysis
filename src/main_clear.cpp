@@ -297,14 +297,7 @@ std::string resolveDatasetName(const std::string& tree_path) {
 }
 
 double chooseSoftWindow(const std::string& tree_path) {
-    const std::string dataset_name = resolveDatasetName(tree_path);
-    if (containsInsensitive(dataset_name, "breast")
-        || containsInsensitive(dataset_name, "steel")
-        || containsInsensitive(dataset_name, "heart")
-        || containsInsensitive(dataset_name, "spam")
-        || containsInsensitive(dataset_name, "spam2")) {
-        return 0.05;
-    }
+    (void)tree_path;
     return 0.05;
 }
 
@@ -315,10 +308,10 @@ void writeClearPredictionsCsv(const std::string& path,
                               const std::vector<int>& soft_adaptive_preds) {
     std::ofstream out(path);
     if (!out) {
-        throw std::runtime_error("Impossible d'ecrire le fichier de resultats clear : " + path);
+        throw std::runtime_error("Unable to write the clear results file: " + path);
     }
 
-    out << "sample_idx,y_true,pred_hard,pred_soft_global,pred_soft_adaptatif\n";
+    out << "sample_idx,y_true,pred_hard,pred_soft_global,pred_soft_adaptive\n";
     for (size_t i = 0; i < y_true.size(); ++i) {
         out << i << ","
             << y_true[i] << ","
@@ -347,22 +340,22 @@ void keepFirstSamples(std::vector<std::vector<double>>& X,
 
 [[maybe_unused]] void printHardPath(const TreeNode* root, const std::vector<double>& x) {
     const TreeNode* node = root;
-    std::cout << "\nChemin hard choisi dans l'arbre :\n";
+    std::cout << "\nSelected hard path in the tree:\n";
     while (node && !node->isLeaf()) {
         const int feat = node->feature_index;
         const double value = x[feat];
         const bool go_left = value <= node->threshold;
-        std::cout << "  Noeud " << node->node_id
+        std::cout << "  Node " << node->node_id
                   << " : X[" << feat << "]=" << value
                   << " <= " << node->threshold
-                  << " ? " << (go_left ? "oui" : "non")
-                  << " -> " << (go_left ? "gauche" : "droite") << "\n";
+                  << " ? " << (go_left ? "yes" : "no")
+                  << " -> " << (go_left ? "left" : "right") << "\n";
         node = go_left ? node->left.get() : node->right.get();
     }
 
     if (node) {
-        std::cout << "  Feuille " << node->node_id
-                  << " : classe predite = " << node->class_label << "\n";
+        std::cout << "  Leaf " << node->node_id
+                  << " : predicted class = " << node->class_label << "\n";
     }
 }
 }
@@ -448,7 +441,7 @@ int main(int argc, char* argv[]) {
     // ─── 3. Collecte des gaps (pour soft adaptatif) ───────────────────────────
     const int requested_sample_count = parseSampleCount(argc, argv);
     keepFirstSamples(X_test, y_test, requested_sample_count);
-    std::cout << "[main_clear] Evaluation sur "
+    std::cout << "[main_clear] Evaluating "
               << X_test.size() << " sample(s).\n";
 
     hard_tree->collectGapStats(X_test);
@@ -472,7 +465,7 @@ int main(int argc, char* argv[]) {
 
     // Soft adaptatif : degré calculé automatiquement par nœud
     engine.configureSoftAdaptive(/*window=*/soft_window, X_test);
-    std::cout << "[main_clear] Soft window utilisee : "
+    std::cout << "[main_clear] Soft window used: "
               << soft_window << "\n";
 
     // ─── 6. Évaluation comparative ────────────────────────────────────────────
@@ -491,7 +484,7 @@ int main(int argc, char* argv[]) {
         soft_adaptive_preds.push_back(engine.predict(x, InferenceMode::SOFT_ADAPTIVE));
     }
 
-    std::cout << "\n=== Metriques detaillees - Hard baseline ===\n";
+    std::cout << "\n=== Detailed metrics - hard baseline ===\n";
     printClassificationReport(y_test, hard_preds, nb_classes);
 
     try {
@@ -505,10 +498,10 @@ int main(int argc, char* argv[]) {
             hard_preds,
             soft_global_preds,
             soft_adaptive_preds);
-        std::cout << "[main_clear] Resultats clear enregistres dans : "
+        std::cout << "[main_clear] Clear results saved to: "
                   << output_path.string() << "\n";
     } catch (const std::exception& ex) {
-        std::cerr << "[main_clear] Avertissement : " << ex.what() << "\n";
+        std::cerr << "[main_clear] Warning: " << ex.what() << "\n";
     }
 
     if (false) {

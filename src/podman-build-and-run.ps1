@@ -8,7 +8,7 @@ $dataDir = Join-Path $PWD "data"
 
 $trainFiles = Get-ChildItem $dataDir -Filter "*_train.csv" | Sort-Object Name
 if (-not $trainFiles) {
-  throw "Aucun dataset *_train.csv n'a ete trouve dans le dossier data."
+  throw "No *_train.csv dataset was found in the data folder."
 }
 
 $datasets = @()
@@ -25,24 +25,24 @@ foreach ($trainFile in $trainFiles) {
 }
 
 if (-not $datasets) {
-  throw "Aucun couple train/test n'a ete trouve dans le dossier data."
+  throw "No train/test dataset pair was found in the data folder."
 }
 
 Write-Host ""
-Write-Host "Datasets disponibles :"
+Write-Host "Available datasets:"
 for ($i = 0; $i -lt $datasets.Count; $i++) {
   Write-Host ("  [{0}] {1}" -f ($i + 1), $datasets[$i].Name)
 }
 
-$choiceText = Read-Host "Choisissez un dataset (numero)"
+$choiceText = Read-Host "Choose a dataset (number)"
 $parsedChoice = 0
 if (-not [int]::TryParse($choiceText, [ref]$parsedChoice)) {
-  throw "Choix invalide : entrez un numero."
+  throw "Invalid choice: enter a number."
 }
 
 $choice = $parsedChoice
 if ($choice -lt 1 -or $choice -gt $datasets.Count) {
-  throw "Choix hors intervalle."
+  throw "Choice out of range."
 }
 
 $selected = $datasets[$choice - 1]
@@ -58,7 +58,7 @@ Import-Csv $selected.TestPath | ForEach-Object { $labels[$_.label] = $true }
 $nbClasses = $labels.Keys.Count
 
 Write-Host ""
-Write-Host "Dataset selectionne : $($selected.Name)"
+Write-Host "Selected dataset: $($selected.Name)"
 Write-Host "  Features : $nbFeatures"
 Write-Host "  Classes  : $nbClasses"
 
@@ -76,15 +76,15 @@ $localPocClear = Join-Path $PWD "build-podman\poc_clear"
 $localPocHe = Join-Path $PWD "build-podman\poc_he"
 
 if (-not (Test-Path $localPocClear)) {
-  throw "Le binaire poc_clear n'a pas ete genere dans build-podman."
+  throw "The poc_clear binary was not generated in build-podman."
 }
 
 if (-not (Test-Path $localPocHe)) {
-  throw "Le binaire poc_he n'a pas ete genere dans build-podman. Relancez la compilation de poc_he en mode verbeux pour voir l'erreur reelle : podman run --rm -v `"${PWD}:/workspace`" -w /workspace $imageName bash -lc `"cmake --build $containerBuildDir --target poc_he --verbose --parallel 1`""
+  throw "The poc_he binary was not generated in build-podman. Re-run the poc_he build in verbose mode to inspect the real error: podman run --rm -v `"${PWD}:/workspace`" -w /workspace $imageName bash -lc `"cmake --build $containerBuildDir --target poc_he --verbose --parallel 1`""
 }
 
 Write-Host ""
-Write-Host "===== Resultats poc_clear ====="
+Write-Host "===== poc_clear results ====="
 podman run --rm `
   -v "${PWD}:/workspace" `
   -w /workspace `
@@ -92,7 +92,7 @@ podman run --rm `
   bash -lc "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:`$LD_LIBRARY_PATH && $containerBuildDir/poc_clear $treePath $nbFeatures $nbClasses"
 
 Write-Host ""
-Write-Host "===== Resultats poc_he ====="
+Write-Host "===== poc_he results ====="
 podman run --rm `
   -v "${PWD}:/workspace" `
   -w /workspace `

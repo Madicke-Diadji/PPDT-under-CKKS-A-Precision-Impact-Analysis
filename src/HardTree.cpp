@@ -19,14 +19,14 @@ HardTree::HardTree(std::shared_ptr<TreeNode> root, int nb_classes, int nb_featur
 
 int HardTree::predict(const std::vector<double>& x) const {
     if (static_cast<int>(x.size()) < nb_features_) {
-        throw std::runtime_error("HardTree::predict: dimension d'entree insuffisante");
+        throw std::runtime_error("HardTree::predict: input dimension is too small");
     }
     return predictNode(root_.get(), x);
 }
 
 const TreeNode* HardTree::predictLeaf(const std::vector<double>& x) const {
     if (static_cast<int>(x.size()) < nb_features_) {
-        throw std::runtime_error("HardTree::predictLeaf: dimension d'entree insuffisante");
+        throw std::runtime_error("HardTree::predictLeaf: input dimension is too small");
     }
 
     const TreeNode* node = root_.get();

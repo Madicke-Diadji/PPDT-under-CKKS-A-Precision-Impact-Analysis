@@ -1,51 +1,51 @@
-# POC HBDT SumPath avec Microsoft SEAL
+# POC HBDT SumPath with Microsoft SEAL
 
-Ce dossier `src/` contient maintenant une version CKKS basée sur `Microsoft SEAL` au lieu d'`OpenFHE`.
+This `src/` directory now contains a CKKS version based on `Microsoft SEAL` instead of `OpenFHE`.
 
-## Points clés
+## Key Points
 
-- `HEInference.h/.cpp` utilisent `seal::Ciphertext`, `seal::CKKSEncoder`, `seal::Evaluator`, `seal::Encryptor` et `seal::Decryptor`
-- `CMakeLists.txt` cherche `SEAL` via `find_package(SEAL REQUIRED CONFIG)`
-- `Containerfile` construit et installe `Microsoft SEAL`
-- les scripts `podman-*.ps1` passent par `SEAL_ROOT` et `SEAL_DIR`
+- `HEInference.h/.cpp` use `seal::Ciphertext`, `seal::CKKSEncoder`, `seal::Evaluator`, `seal::Encryptor`, and `seal::Decryptor`
+- `CMakeLists.txt` looks for `SEAL` via `find_package(SEAL REQUIRED CONFIG)`
+- `Containerfile` builds and installs `Microsoft SEAL`
+- the `podman-*.ps1` scripts rely on `SEAL_ROOT` and `SEAL_DIR`
 
-## Build natif Linux
+## Native Linux Build
 
-Si SEAL est déjà installé :
+If SEAL is already installed:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSEAL_ROOT=/opt/seal-install
 cmake --build build --parallel
 ```
 
-Ou directement avec le dossier de config CMake :
+Or directly with the CMake config directory:
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSEAL_DIR=/opt/seal-install/lib/cmake/SEAL
 cmake --build build --parallel
 ```
 
-Variables reconnues :
+Recognized variables:
 
-- `SEAL_ROOT` : préfixe d'installation de Microsoft SEAL
-- `SEAL_HINT_DIR` : chemin indicatif vers `SEALConfig.cmake`
-- `SEAL_DIR` : chemin exact du dossier contenant `SEALConfig.cmake`
+- `SEAL_ROOT`: installation prefix for Microsoft SEAL
+- `SEAL_HINT_DIR`: hint path to `SEALConfig.cmake`
+- `SEAL_DIR`: exact directory containing `SEALConfig.cmake`
 
-## Build avec Podman
+## Build with Podman
 
-Construire l'image :
+Build the image:
 
 ```powershell
 podman build --build-arg SEAL_BUILD_JOBS=2 -t poc-hbdt-seal -f Containerfile .
 ```
 
-Compiler dans le conteneur :
+Compile inside the container:
 
 ```powershell
 podman run --rm -v "${PWD}:/workspace" -w /workspace poc-hbdt-seal bash -lc "cmake -S . -B /workspace/build-podman -DCMAKE_BUILD_TYPE=Release -DSEAL_ROOT=\$SEAL_ROOT -DSEAL_DIR=\$SEAL_DIR && cmake --build /workspace/build-podman --parallel"
 ```
 
-Ou via les scripts fournis :
+Or via the provided scripts:
 
 ```powershell
 .\podman-build.ps1
@@ -55,21 +55,21 @@ Ou via les scripts fournis :
 .\podman-select-dataset-and-run.ps1
 ```
 
-`.\podman-run-he.ps1` affiche maintenant un menu :
+`.\podman-run-he.ps1` now shows a menu:
 
-- option `1` : lancer la demo HE integree
-- options suivantes : choisir un dataset detecte dans `data/`
-- si aucun dataset n'est disponible, seule la demo integree est proposee
+- option `1`: run the built-in HE demo
+- next options: choose a detected dataset in `data/`
+- if no dataset is available, only the built-in demo is offered
 
-## Exécutables
+## Executables
 
-Après compilation :
+After compilation:
 
 - `poc_clear`
 - `poc_he`
 - `run_tests`
 - `run_tests_akavia`
 
-## Remarque
+## Note
 
-La logique d'inférence côté arbre n'a pas été changée ; la migration porte sur le backend HE CKKS et la chaîne de build autour de SEAL.
+The tree-side inference logic has not changed; the migration only affects the CKKS HE backend and the surrounding SEAL build toolchain.

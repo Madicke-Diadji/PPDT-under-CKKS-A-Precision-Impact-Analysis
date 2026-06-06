@@ -415,14 +415,7 @@ std::string resolveDatasetName(const std::string& tree_path) {
 }
 
 double chooseSoftWindow(const std::string& tree_path) {
-    const std::string dataset_name = resolveDatasetName(tree_path);
-    if (containsInsensitive(dataset_name, "breast")
-        || containsInsensitive(dataset_name, "steel")
-        || containsInsensitive(dataset_name, "heart")
-        || containsInsensitive(dataset_name, "spam")
-        || containsInsensitive(dataset_name, "spam2")) {
-        return 0.05;
-    }
+    (void)tree_path;
     return 0.05;
 }
 
@@ -457,10 +450,10 @@ void writeHePredictionsCsv(const std::string& path,
                            const std::vector<int>& soft_adaptive_preds) {
     std::ofstream out(path);
     if (!out) {
-        throw std::runtime_error("Impossible d'ecrire le fichier de resultats HE : " + path);
+        throw std::runtime_error("Unable to write the HE results file: " + path);
     }
 
-    out << "sample_idx,y_true,pred_soft_global_ckks,pred_soft_adaptatif_ckks\n";
+    out << "sample_idx,y_true,pred_soft_global_ckks,pred_soft_adaptive_ckks\n";
     for (size_t i = 0; i < y_true.size(); ++i) {
         out << i << ","
             << y_true[i] << ","
@@ -487,7 +480,7 @@ void keepFirstSamples(std::vector<std::vector<double>>& X,
 }
 
 [[maybe_unused]] void printAdaptiveDegrees(const std::shared_ptr<TreeNode>& root) {
-    std::cout << "\nDegres adaptatifs par noeud :\n";
+    std::cout << "\nAdaptive degrees by node:\n";
     std::queue<std::shared_ptr<TreeNode>> q;
     q.push(root);
     while (!q.empty()) {
@@ -674,7 +667,7 @@ int main(int argc, char* argv[]) {
                 demo.server_inference_ms,
                 demo.server_inference_ms);
         } catch (const std::exception& ex) {
-            std::cout << "\nEchec pour " << title << " :\n";
+            std::cout << "\nFailure for " << title << ":\n";
             std::cout << "  " << ex.what() << "\n";
         }
     };
@@ -696,13 +689,13 @@ int main(int argc, char* argv[]) {
     std::string adaptive_error;
 
     std::cout << "\n==============================================\n";
-    std::cout << "  Resultats - inference chiffree (CKKS/SEAL)\n";
+    std::cout << "  Results - encrypted inference (CKKS/SEAL)\n";
     std::cout << "==============================================\n";
     std::cout << "  Samples               : " << X_test.size() << "\n";
     std::cout << "  Soft window           : " << soft_window << "\n";
 
     try {
-        std::cout << "[main_he] Lancement HE Soft global...\n";
+        std::cout << "[main_he] Running HE soft global...\n";
         auto t_global_0 = std::chrono::high_resolution_clock::now();
         preds_he_global = he_engine.predictEncryptedBatch(X_test, false);
         auto t_global_1 = std::chrono::high_resolution_clock::now();
@@ -719,7 +712,7 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        std::cout << "[main_he] Lancement HE Soft adaptatif...\n";
+        std::cout << "[main_he] Running HE soft adaptive...\n";
         auto t_adaptive_0 = std::chrono::high_resolution_clock::now();
         preds_he_adaptive = he_engine.predictEncryptedBatch(X_test, true);
         auto t_adaptive_1 = std::chrono::high_resolution_clock::now();
@@ -741,18 +734,18 @@ int main(int argc, char* argv[]) {
                   << std::fixed << std::setprecision(2)
                   << accuracy_global << "%   " << avg_global_ms << " ms/inf\n";
     } else {
-        std::cout << "  HE Soft global        : echec\n";
-        std::cout << "    Raison              : " << global_error << "\n";
+        std::cout << "  HE Soft global        : failed\n";
+        std::cout << "    Reason              : " << global_error << "\n";
     }
 
     if (has_adaptive_results) {
-        std::cout << "  HE Soft adaptatif     : "
+        std::cout << "  HE Soft adaptive      : "
                   << correct_adaptive << "/" << X_test.size() << " - "
                   << std::fixed << std::setprecision(2)
                   << accuracy_adaptive << "%   " << avg_adaptive_ms << " ms/inf\n";
     } else {
-        std::cout << "  HE Soft adaptatif     : echec\n";
-        std::cout << "    Raison              : " << adaptive_error << "\n";
+        std::cout << "  HE Soft adaptive      : failed\n";
+        std::cout << "    Reason              : " << adaptive_error << "\n";
     }
 
     std::cout << "  Mult. depth           : " << mult_depth << "\n";
@@ -771,10 +764,10 @@ int main(int argc, char* argv[]) {
                 y_test,
                 preds_he_global,
                 preds_he_adaptive);
-            std::cout << "[main_he] Resultats CKKS enregistres dans : "
+            std::cout << "[main_he] CKKS results saved to: "
                       << output_path.string() << "\n";
         } catch (const std::exception& ex) {
-            std::cout << "[main_he] Echec d'ecriture des resultats CKKS : "
+            std::cout << "[main_he] Failed to write CKKS results: "
                       << ex.what() << "\n";
         }
     }

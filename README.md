@@ -1,65 +1,174 @@
-# My_POC_All
+# CKKS Decision Tree Inference POC
 
-Ce POC execute :
+This repository contains a proof of concept for privacy-preserving decision tree inference with CKKS and Microsoft SEAL.
 
-- une inference en clair `hard`
-- une inference en clair `soft_global`
-- une inference en clair `soft_adaptatif`
-- une inference chiffree homomorphe du `soft_global`
-- une inference chiffree homomorphe du `soft_adaptatif`
+The project evaluates a decision tree in several modes:
 
-Pour chaque inference, le programme affiche :
+- clear `hard` inference
+- clear `soft_global` inference
+- clear `soft_adaptive` inference
+- encrypted `HE Soft global` inference
+- encrypted `HE Soft adaptive` inference
 
-- le nombre de bonnes predictions
-- le total des echantillons testes
-- le pourcentage de precision
+The main entry point for reproducible runs is [`run.ps1`](/abs/c:/Users/madicke-diadji.mbodj/POC_DT/My_Poc_all/run.ps1).
 
-Le pipeline travaille sur les `n` premiers samples du jeu de test.
+## What This Repo Contains
 
-## Commande d'execution
+- `src/`: C++ implementation of clear and CKKS inference
+- `data/`: datasets, exported trees, and benchmark inputs
+- `results/`: generated logs and CSV results
+- `DT_clear/`: plain-tree benchmark assets
+- `paper_dpm_esorics/`: paper source
+- `run.ps1`: main orchestration script
 
-Depuis la racine du projet :
+## Prerequisites
+
+To run the POC as documented here, you need:
+
+- Windows PowerShell
+- [Podman](https://podman.io/) installed and available in `PATH`
+- Git
+- Python 3
+
+The container build installs Microsoft SEAL automatically. You do not need a separate local SEAL installation when using `run.ps1`.
+
+## Quick Start
+
+1. Clone the repository.
+2. Open PowerShell in the repository root.
+3. Run one of the supported datasets.
+
+Example:
 
 ```powershell
-.\run.ps1 -Dataset breast -SampleCount 10
+.\run.ps1 -Dataset breast -SampleCount 32
 ```
 
-Exemples :
+On the first run, the script may:
+
+- build the Podman image
+- compile `poc_clear` and `poc_he`
+- create result folders if they do not exist
+
+If you want to force a rebuild:
+
+```powershell
+.\run.ps1 -Dataset breast -SampleCount 32 -Rebuild
+```
+
+## Supported Datasets
+
+The main script currently exposes these dataset names:
+
+- `iris`
+- `cancer`
+- `wine`
+- `heart`
+- `steel`
+- `breast`
+
+If you run `.\run.ps1` without `-Dataset`, the script shows an interactive dataset menu.
+
+## Recommended Commands
+
+Validated examples from the current workflow:
 
 ```powershell
 .\run.ps1 -Dataset iris -SampleCount 20
-.\run.ps1 -Dataset cancer -SampleCount 15
-.\run.ps1 -Dataset breast -SampleCount 10 -Rebuild
-.\run.ps1 -Dataset spam -SampleCount 2
-.\run.ps1 -Dataset spam2 -SampleCount 2
+.\run.ps1 -Dataset cancer -SampleCount 32
+.\run.ps1 -Dataset wine -SampleCount 26
+.\run.ps1 -Dataset heart -SampleCount 26
+.\run.ps1 -Dataset breast -SampleCount 32
+.\run.ps1 -Dataset steel -SampleCount 32
 ```
 
-## Sortie attendue
+## What the Script Does
 
-En clair :
+For a standard run, `run.ps1`:
 
-- `Hard (clair) : bonnes_predictions/total - pourcentage`
-- `Soft global (clair) : bonnes_predictions/total - pourcentage`
-- `Soft adaptatif (clair) : bonnes_predictions/total - pourcentage`
+1. selects the dataset
+2. prepares the result directories
+3. builds the Podman image if needed
+4. compiles the clear and HE binaries in the container
+5. runs `poc_clear`
+6. runs `poc_he`
+7. parses the output and stores structured results
 
-En chiffre :
+## Expected Console Output
 
-- `HE Soft global : bonnes_predictions/total - pourcentage`
-- `HE Soft adaptatif : bonnes_predictions/total - pourcentage`
+You should see sections similar to:
 
-## Fichiers de resultats
+```text
+===== poc_clear results =====
+Hard (clear)             : correct/total - accuracy%
+Soft global (clear)      : correct/total - accuracy%
+Soft adaptive (clear)    : correct/total - accuracy%
 
-Apres chaque execution, le script enregistre automatiquement :
+===== poc_he results =====
+HE Soft global           : correct/total - accuracy%   ms/inf
+HE Soft adaptive         : correct/total - accuracy%   ms/inf
+```
 
-- un CSV cumulatif : `results/run_results_soft_adaptatif.csv`
-- un log horodate : `results/logs/run_<dataset>_<timestamp>.log`
-- un CSV detaille clair associe au log : `results/logs/run_<dataset>_<timestamp>_clear_predictions.csv`
-- un CSV detaille CKKS associe au log : `results/logs/run_<dataset>_<timestamp>_he_predictions.csv`
+The script also prints a final summary with the dataset name and parsed metrics.
 
-Le CSV cumulatif contient notamment :
+## Generated Files
 
-- les resultats `hard`, `soft_global`, `soft_adaptatif` en clair
-- le resultat `soft_global` en HE
-- le resultat `soft_adaptatif` en HE
-- les chemins du log et des CSV detailles associes
-- le chemin du fichier de log associe
+After each run, the script saves:
+
+- cumulative results CSV:
+  `results/run_results_soft_adaptatif.csv`
+- timestamped run log:
+  `results/logs/run_<dataset>_<timestamp>.log`
+- detailed clear predictions:
+  `results/logs/run_<dataset>_<timestamp>_clear_predictions.csv`
+- detailed HE predictions:
+  `results/logs/run_<dataset>_<timestamp>_he_predictions.csv`
+
+The cumulative CSV includes, among other fields:
+
+- clear `hard`, `soft_global`, and `soft_adaptive` metrics
+- HE `soft_global` and `soft_adaptive` metrics
+- average HE timing per inference
+- paths to the detailed log and prediction files
+
+## Troubleshooting
+
+If `podman` is not recognized:
+
+- install Podman
+- restart PowerShell
+- verify with:
+
+```powershell
+podman --version
+```
+
+If the script fails during container compilation:
+
+- rerun with `-Rebuild`
+- check the latest file in `results/logs/`
+
+If a dataset is reported as unknown:
+
+- use one of the dataset names listed above
+- or run the script without `-Dataset` to use the menu
+
+## Developer Notes
+
+- The main implementation lives in `src/`
+- The CKKS container setup is described in [src/README.md](/abs/c:/Users/madicke-diadji.mbodj/POC_DT/My_Poc_all/src/README.md)
+- The repository also contains benchmark and paper material; they are not required for a basic run
+
+## Related External Projects
+
+This repository includes local comparison material related to external projects such as Akavia, SortingHat, and Concrete-ML.
+
+If you want to run those projects directly, please use their official repositories and setup instructions from their respective links. This repository does not aim to replace their original installation or execution workflows.
+
+## Minimal Reproduction Path
+
+If someone lands on your GitHub page and wants the fastest path to a working run, this is the command to use first:
+
+```powershell
+.\run.ps1 -Dataset iris -SampleCount 20
+```

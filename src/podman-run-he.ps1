@@ -16,7 +16,7 @@ function Ensure-Image {
   podman image exists $imageName 2>$null
   if ($LASTEXITCODE -ne 0) {
     Write-Host ""
-    Write-Host "Image $imageName absente. Construction en cours..."
+    Write-Host "Image $imageName is missing. Building it now..."
     podman build --build-arg SEAL_BUILD_JOBS=$sealBuildJobs -t $imageName -f (Join-Path $scriptDir "Containerfile") $scriptDir
   }
 }
@@ -34,7 +34,7 @@ function Run-PocHeDemo {
     [string]$SampleText = ""
   )
   Write-Host ""
-  Write-Host "Lancement de la demo HE integree..."
+  Write-Host "Running the built-in HE demo..."
   $escapedSample = $SampleText.Replace('"', '\"')
   podman run --rm `
     -v "${projectRoot}:/workspace" `
@@ -72,25 +72,25 @@ if ($selectedDataDir) {
 }
 
 Write-Host ""
-Write-Host "Options disponibles :"
-Write-Host "  [1] Demo HE integree"
+Write-Host "Available options:"
+Write-Host "  [1] Built-in HE demo"
 if ($datasets.Count -gt 0) {
-  Write-Host "  Dossier data detecte : $selectedDataDir"
+  Write-Host "  Detected data directory: $selectedDataDir"
   for ($i = 0; $i -lt $datasets.Count; $i++) {
-    Write-Host ("  [{0}] Dataset : {1}" -f ($i + 2), $datasets[$i].Name)
+    Write-Host ("  [{0}] Dataset: {1}" -f ($i + 2), $datasets[$i].Name)
   }
 } else {
-  Write-Host "  Aucun dataset detecte dans src\data ni data"
+  Write-Host "  No dataset detected in src\\data or data"
 }
 
-$choiceText = Read-Host "Choisissez une option (numero)"
+$choiceText = Read-Host "Choose an option (number)"
 $parsedChoice = 0
 if (-not [int]::TryParse($choiceText, [ref]$parsedChoice)) {
-  throw "Choix invalide : entrez un numero."
+  throw "Invalid choice: enter a number."
 }
 
 $choice = $parsedChoice
-$sampleText = Read-Host "Entrez un sample pour l'inference (CSV ou liste), ou laissez vide pour un sample aleatoire"
+$sampleText = Read-Host "Enter a sample for inference (CSV or list), or leave empty for a random sample"
 
 if ($choice -eq 1) {
   Run-PocHeDemo -SampleText $sampleText
@@ -98,7 +98,7 @@ if ($choice -eq 1) {
 }
 
 if ($choice -lt 2 -or $choice -gt ($datasets.Count + 1)) {
-  throw "Choix hors intervalle."
+  throw "Choice out of range."
 }
 
 $selected = $datasets[$choice - 2]
@@ -116,20 +116,20 @@ Import-Csv $selected.TestPath | ForEach-Object { $labels[$_.label] = $true }
 $nbClasses = $labels.Keys.Count
 
 Write-Host ""
-Write-Host "Dataset selectionne : $($selected.Name)"
+Write-Host "Selected dataset: $($selected.Name)"
 Write-Host "  Features : $nbFeatures"
 Write-Host "  Classes  : $nbClasses"
-Write-Host "  Dossier  : $selectedDataDir"
+Write-Host "  Folder   : $selectedDataDir"
 
 $treeArg = $containerTreePath
 if (Test-Path $plainTreeJson) {
-  Write-Host "  Arbre clair : $plainTreeJson"
+  Write-Host "  Clear tree : $plainTreeJson"
   $treeArg = "$containerDtClearDir/plain_tree_$($selected.Name).json"
 } elseif (Test-Path $plainTreeTxt) {
-  Write-Host "  Arbre clair : $plainTreeTxt"
+  Write-Host "  Clear tree : $plainTreeTxt"
   $treeArg = "$containerDtClearDir/plain_tree_$($selected.Name).txt"
 } else {
-  Write-Host "  Arbre clair : aucun plain_tree trouve, generation via train_and_export.py"
+  Write-Host "  Clear tree : no plain_tree found, generating one via train_and_export.py"
   python (Join-Path $scriptDir "train_and_export.py") --data-prefix $hostDatasetPrefix --depth 4 --output (Join-Path $projectRoot "data/tree.csv") --json (Join-Path $projectRoot "data/tree.json")
 }
 

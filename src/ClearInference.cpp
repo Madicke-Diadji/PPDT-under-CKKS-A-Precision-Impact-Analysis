@@ -90,16 +90,16 @@ ClearInference::Results ClearInference::evaluateAll(
 }
 
 void ClearInference::printResults(const Results& r) const {
-    std::cout << "\n=== Resultats - inference en clair ===\n"
-              << "Samples          : " << r.nb_samples << "\n"
-              << "Hard (clair)             : "
+    std::cout << "\n=== Results - clear inference ===\n"
+              << "Samples                  : " << r.nb_samples << "\n"
+              << "Hard (clear)             : "
               << r.correct_hard << "/" << r.nb_samples << " - "
               << std::fixed << std::setprecision(2)
               << r.accuracy_hard << "%\n"
-              << "Soft global (clair)      : "
+              << "Soft global (clear)      : "
               << r.correct_soft_global << "/" << r.nb_samples << " - "
               << r.accuracy_soft_global << "%\n"
-              << "Soft adaptatif (clair)   : "
+              << "Soft adaptive (clear)    : "
               << r.correct_soft_adaptive << "/" << r.nb_samples << " - "
               << r.accuracy_soft_adaptive << "%\n";
 }

@@ -113,7 +113,7 @@ std::vector<int> SoftTree::predictBatch(const std::vector<std::vector<double>>& 
 
 // ─── Affichage des degrés ────────────────────────────────────────────────────
 void SoftTree::printDegrees() const {
-    std::cout << "Degrés polynomiaux par noeud :\n";
+    std::cout << "Polynomial degrees by node:\n";
     std::queue<std::shared_ptr<TreeNode>> q;
     q.push(root_);
     while (!q.empty()) {

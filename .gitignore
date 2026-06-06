@@ -14,13 +14,4 @@ CMakeCache.txt
 cmake_install.cmake
 Makefile
 compile_commands.json
-paper_dpm_esorics/*.aux
-paper_dpm_esorics/*.log
-paper_dpm_esorics/*.out
-paper_dpm_esorics/*.toc
-paper_dpm_esorics/*.bbl
-paper_dpm_esorics/*.blg
-paper_dpm_esorics/*.fls
-paper_dpm_esorics/*.fdb_latexmk
-paper_dpm_esorics/*.synctex.gz
 '@ | Set-Content .gitignore

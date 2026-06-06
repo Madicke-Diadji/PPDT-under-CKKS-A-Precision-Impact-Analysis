@@ -155,7 +155,7 @@ SoftStepApprox SoftStepApprox::makeAdaptive(double min_gap, double window, int n
 }
 
 void SoftStepApprox::printCoeffs() const {
-    std::cout << "Polynôme degré " << getDegree() << " [window=" << window_ << "] :\n";
+    std::cout << "Polynomial degree " << getDegree() << " [window=" << window_ << "]:\n";
     for (int i = 0; i <= getDegree(); ++i)
         std::cout << "  c[" << i << "] = " << std::setprecision(8) << poly_.coeffs[i] << "\n";
 }
