@@ -322,25 +322,11 @@ function Get-StandardDatasetMetadata {
   Import-Csv $trainPath | ForEach-Object { $labels[$_.label] = $true }
   Import-Csv $testPath | ForEach-Object { $labels[$_.label] = $true }
 
-  $existingModelCsv = Join-Path $dataDir "tree.csv"
-  $existingTestData = Join-Path $dataDir "test_data.csv"
-  $existingModelJson = Join-Path $dataDir "tree.json"
-
-  if (-not (Test-Path $existingModelCsv)) {
-    throw "Pre-trained tree not found: $existingModelCsv. Run training/export first, then retry inference."
-  }
-  if (-not (Test-Path $existingTestData)) {
-    throw "Exported test set not found: $existingTestData. Run training/export first, then retry inference."
-  }
-
   Write-Host ""
-  Write-Host "Arbre deja entraine detecte pour l'inference standard :"
-  Write-Host "  Modele CSV          : $existingModelCsv"
-  if (Test-Path $existingModelJson) {
-    Write-Host "  Modele JSON         : $existingModelJson"
-  }
-  Write-Host "  Donnees de test     : $existingTestData"
-  Write-Host "  No training step will be launched."
+  Write-Host "Standard dataset detected:"
+  Write-Host "  Training CSV        : $trainPath"
+  Write-Host "  Test CSV            : $testPath"
+  Write-Host "  A fresh tree export will be generated for this dataset."
 
   return [PSCustomObject]@{
     Features = $featureCount
@@ -736,6 +722,10 @@ Write-Host "Evaluated samples   : $SampleCount"
 Ensure-PodmanImage
 Ensure-Binaries
 Ensure-ResultsDirectories
+
+if ($plan.Type -eq "standard" -and $plan.LocalPrefix) {
+  Train-StandardDataset -LocalPrefix $plan.LocalPrefix
+}
 
 $runTimestamp = Get-Date
 $timestampFile = $runTimestamp.ToString("yyyyMMdd_HHmmss")

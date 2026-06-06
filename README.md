@@ -78,7 +78,7 @@ The repository is currently scripted around `Podman`, but Docker users can still
 
 If you are using Docker instead of Podman, keep in mind that the ready-to-run automation in this repository targets `PowerShell + Podman`. Docker use is therefore best treated as a manual advanced setup rather than the default supported path.
 
-Example Docker workflow:
+Step-by-step Docker example:
 
 ```powershell
 docker build --build-arg SEAL_BUILD_JOBS=2 -t poc-hbdt-seal -f src/Containerfile src
@@ -87,12 +87,27 @@ docker run --rm -v "${PWD}:/workspace" -w /workspace/src poc-hbdt-seal bash -lc 
 docker run --rm -v "${PWD}:/workspace" -w /workspace/src poc-hbdt-seal bash -lc "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:\$LD_LIBRARY_PATH && /workspace/build-docker/poc_he /workspace/data/tree.csv 13 3 26"
 ```
 
-In the example above:
+How to use these commands:
 
-- the first command builds the container image
-- the second command compiles the two executables inside the container
-- the last two commands run clear and HE inference manually
-- `13 3 26` correspond to `features`, `classes`, and `sample_count` for the chosen dataset and must be adapted if you switch dataset
+1. Run the first command to build the Docker image from `src/Containerfile`.
+2. Run the second command to compile `poc_clear` and `poc_he` inside the container.
+3. Run the third command to launch clear inference manually.
+4. Run the fourth command to launch HE inference manually.
+
+Parameter meaning for the last two commands:
+
+- `/workspace/data/tree.csv`: path to the model file inside the mounted repository
+- `13`: number of features
+- `3`: number of classes
+- `26`: number of evaluated samples
+
+If you switch dataset, you must adapt those three numeric values to the selected dataset.
+
+For a first manual Docker test, `wine` is the example encoded above because it maps to:
+
+- `13` features
+- `3` classes
+- `26` samples in the current documented run
 
 For most users, `.\run.ps1` remains the safer and easier entry point because it automates those steps and records the outputs in the expected result files.
 
