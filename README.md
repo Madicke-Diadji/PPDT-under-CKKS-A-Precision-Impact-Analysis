@@ -26,7 +26,7 @@ The main entry point for reproducible runs is [`run.ps1`](/abs/c:/Users/madicke-
 To run the POC as documented here, you need:
 
 - Windows PowerShell
-- [Podman](https://podman.io/) installed and available in `PATH`
+- either [Podman](https://podman.io/) or Docker installed and available in `PATH`
 - Git
 - Python 3
 
@@ -36,84 +36,49 @@ The container build installs Microsoft SEAL automatically. You do not need a sep
 
 1. Clone the repository.
 2. Open PowerShell in the repository root.
-3. Run one of the supported datasets.
+3. Run the dataset you want with `run.ps1`.
 
-Example:
+The first run may build the container image, compile `poc_clear` and `poc_he`, and create the `results/` folders.
 
-```powershell
-.\run.ps1 -Dataset breast -SampleCount 32
-```
+## Reviewer Commands
 
-On the first run, the script may:
+The recommended entry point for all reviewers is `run.ps1`.
 
-- build the Podman image
-- compile `poc_clear` and `poc_he`
-- create result folders if they do not exist
-
-If you want to force a rebuild:
+With Podman:
 
 ```powershell
+.\run.ps1 -Dataset iris -SampleCount 20 -Rebuild
+.\run.ps1 -Dataset cancer -SampleCount 32 -Rebuild
+.\run.ps1 -Dataset wine -SampleCount 26 -Rebuild
+.\run.ps1 -Dataset heart -SampleCount 26 -Rebuild
 .\run.ps1 -Dataset breast -SampleCount 32 -Rebuild
+.\run.ps1 -Dataset steel -SampleCount 32 -Rebuild
 ```
 
-## Container Usage
-
-The recommended way to run this POC is through the provided PowerShell entry point:
-
-```powershell
-.\run.ps1 -Dataset iris -SampleCount 20
-```
-
-Docker users can use the same script shape by selecting the container engine explicitly:
+With Docker:
 
 ```powershell
 .\run.ps1 -Dataset iris -SampleCount 20 -Rebuild -ContainerEngine docker
+.\run.ps1 -Dataset cancer -SampleCount 32 -Rebuild -ContainerEngine docker
+.\run.ps1 -Dataset wine -SampleCount 26 -Rebuild -ContainerEngine docker
+.\run.ps1 -Dataset heart -SampleCount 26 -Rebuild -ContainerEngine docker
+.\run.ps1 -Dataset breast -SampleCount 32 -Rebuild -ContainerEngine docker
+.\run.ps1 -Dataset steel -SampleCount 32 -Rebuild -ContainerEngine docker
 ```
 
-`run.ps1` is the official workflow for this repository. It:
+Notes:
+
+- `podman` is the default container engine
+- Docker is enabled through `-ContainerEngine docker`
+- `-Rebuild` is recommended on a new machine to avoid stale binaries or stale exported trees
+- for standard datasets (`iris`, `cancer`, `wine`), the script regenerates the exported tree before inference
+
+`run.ps1`:
 
 - builds the container image when needed
 - compiles `poc_clear` and `poc_he` inside the container
 - runs clear and HE inference
-- stores logs and CSV outputs in `results/`
-
-The script supports both `podman` and `docker` through `-ContainerEngine`.
-
-- default engine: `podman`
-- Docker example: `.\run.ps1 -Dataset iris -SampleCount 20 -Rebuild -ContainerEngine docker`
-
-Step-by-step Docker example:
-
-```powershell
-docker build --build-arg SEAL_BUILD_JOBS=2 -t poc-hbdt-seal -f src/Containerfile src
-docker run --rm -v "${PWD}:/workspace" -w /workspace/src poc-hbdt-seal bash -lc "cmake -S . -B /workspace/build-docker -DCMAKE_BUILD_TYPE=Release -DSEAL_ROOT=\$SEAL_ROOT -DSEAL_DIR=\$SEAL_DIR && cmake --build /workspace/build-docker --target poc_clear --parallel && cmake --build /workspace/build-docker --target poc_he --parallel 1"
-docker run --rm -v "${PWD}:/workspace" -w /workspace/src poc-hbdt-seal bash -lc "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:\$LD_LIBRARY_PATH && /workspace/build-docker/poc_clear /workspace/data/tree.csv 13 3 26"
-docker run --rm -v "${PWD}:/workspace" -w /workspace/src poc-hbdt-seal bash -lc "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:\$LD_LIBRARY_PATH && /workspace/build-docker/poc_he /workspace/data/tree.csv 13 3 26"
-```
-
-How to use these commands:
-
-1. Run the first command to build the Docker image from `src/Containerfile`.
-2. Run the second command to compile `poc_clear` and `poc_he` inside the container.
-3. Run the third command to launch clear inference manually.
-4. Run the fourth command to launch HE inference manually.
-
-Parameter meaning for the last two commands:
-
-- `/workspace/data/tree.csv`: path to the model file inside the mounted repository
-- `13`: number of features
-- `3`: number of classes
-- `26`: number of evaluated samples
-
-If you switch dataset, you must adapt those three numeric values to the selected dataset.
-
-For a first manual Docker test, `wine` is the example encoded above because it maps to:
-
-- `13` features
-- `3` classes
-- `26` samples in the current documented run
-
-For most users, `.\run.ps1` remains the safer and easier entry point because it automates those steps and records the outputs in the expected result files.
+- saves logs and CSV outputs in `results/`
 
 ## Supported Datasets
 
@@ -127,19 +92,6 @@ The main script currently exposes these dataset names:
 - `breast`
 
 If you run `.\run.ps1` without `-Dataset`, the script shows an interactive dataset menu.
-
-## Recommended Commands
-
-Validated examples from the current workflow:
-
-```powershell
-.\run.ps1 -Dataset iris -SampleCount 20
-.\run.ps1 -Dataset cancer -SampleCount 32
-.\run.ps1 -Dataset wine -SampleCount 26
-.\run.ps1 -Dataset heart -SampleCount 26
-.\run.ps1 -Dataset breast -SampleCount 32
-.\run.ps1 -Dataset steel -SampleCount 32
-```
 
 ## What the Script Does
 
@@ -192,14 +144,15 @@ The cumulative CSV includes, among other fields:
 
 ## Troubleshooting
 
-If `podman` is not recognized:
+If the selected container engine is not recognized:
 
-- install Podman
+- install Podman or Docker
 - restart PowerShell
-- verify with:
+- verify with one of:
 
 ```powershell
 podman --version
+docker --version
 ```
 
 If the script fails during container compilation:
@@ -212,22 +165,10 @@ If a dataset is reported as unknown:
 - use one of the dataset names listed above
 - or run the script without `-Dataset` to use the menu
 
-## Developer Notes
-
-- The main implementation lives in `src/`
-- The CKKS container setup is described in [src/README.md](/abs/c:/Users/madicke-diadji.mbodj/POC_DT/My_Poc_all/src/README.md)
-- The repository also contains benchmark and paper material; they are not required for a basic run
-
-## Related External Projects
-
-This repository includes local comparison material related to external projects such as Akavia, SortingHat, and Concrete-ML.
-
-If you want to run those projects directly, please use their official repositories and setup instructions from their respective links. This repository does not aim to replace their original installation or execution workflows.
-
 ## Minimal Reproduction Path
 
 If someone lands on your GitHub page and wants the fastest path to a working run, this is the command to use first:
 
 ```powershell
-.\run.ps1 -Dataset iris -SampleCount 20
+.\run.ps1 -Dataset iris -SampleCount 20 -Rebuild
 ```
