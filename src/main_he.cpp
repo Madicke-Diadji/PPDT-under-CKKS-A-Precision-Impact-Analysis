@@ -66,6 +66,11 @@ int chooseLayoutResolution(int nb_features) {
     return (nb_features <= 4) ? 4 : 2;
 }
 
+bool shouldUseNodeWiseNormalization(const std::string& tree_path) {
+    const fs::path path(tree_path);
+    return path.filename() == "model.json";
+}
+
 bool containsInsensitive(std::string value, const std::string& needle) {
     std::transform(value.begin(), value.end(), value.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -604,7 +609,11 @@ int main(int argc, char* argv[]) {
     hard_tree->collectGapStats(X_test);
     const std::string dataset_name = resolveDatasetName(tree_path);
     const HEProfile he_profile = chooseHEProfile(nb_features, dataset_name);
-    assignNodeNormFactors(root, X_test, he_profile.max_degree);
+    if (shouldUseNodeWiseNormalization(tree_path)) {
+        assignNodeNormFactors(root, X_test, he_profile.max_degree);
+    } else {
+        capAdaptiveDegrees(root, he_profile.max_degree);
+    }
     const int max_adaptive_degree = getMaxAdaptiveDegree(root);
 
     int n_max = he_profile.layout_resolution;

@@ -3,6 +3,7 @@ param(
   [string]$Dataset,
   [string]$ImageName = "localhost/poc-hbdt-seal:latest",
   [string]$BuildDir = "build-podman-soft-adaptatif-he",
+  [ValidateSet("podman", "docker")][string]$ContainerEngine = "podman",
   [switch]$Rebuild,
   [int]$SampleCount = 10
 )
@@ -390,8 +391,8 @@ function Get-DatasetExecutionPlan {
 
 function Ensure-PodmanImage {
   Write-Host ""
-  Write-Host "Construction de l'image Podman..."
-  $buildResult = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
+  Write-Host "Building container image with $ContainerEngine..."
+  $buildResult = Invoke-LoggedCommand -FilePath $ContainerEngine -Arguments @(
     "build",
     "--build-arg", "SEAL_BUILD_JOBS=2",
     "-t", $ImageName,
@@ -400,7 +401,7 @@ function Ensure-PodmanImage {
   )
 
   if ($buildResult.ExitCode -ne 0) {
-    throw "Podman build failed (code $($buildResult.ExitCode))."
+    throw "Container image build failed with $ContainerEngine (code $($buildResult.ExitCode))."
   }
 }
 
@@ -415,7 +416,7 @@ function Ensure-Binaries {
 
   Write-Host ""
   Write-Host "Compilation de poc_clear et poc_he..."
-  $compileResult = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
+  $compileResult = Invoke-LoggedCommand -FilePath $ContainerEngine -Arguments @(
     "run", "--rm",
     "-v", "${repoRoot}:/workspace",
     "-w", "/workspace/src",
@@ -424,7 +425,7 @@ function Ensure-Binaries {
   )
 
   if ($compileResult.ExitCode -ne 0) {
-    throw "CMake/Podman compilation failed (code $($compileResult.ExitCode))."
+    throw "CMake/container compilation failed with $ContainerEngine (code $($compileResult.ExitCode))."
   }
 }
 
@@ -460,7 +461,7 @@ function Run-ClearInference {
 
   Write-Host ""
   Write-Host "===== poc_clear results ====="
-  $result = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
+  $result = Invoke-LoggedCommand -FilePath $ContainerEngine -Arguments @(
     "run", "--rm",
     "-e", "POC_RESULTS_DIR=/workspace/results",
     "-e", "POC_DATASET_NAME=$DatasetName",
@@ -490,7 +491,7 @@ function Run-HeInference {
 
   Write-Host ""
   Write-Host "===== poc_he results ====="
-  $result = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
+  $result = Invoke-LoggedCommand -FilePath $ContainerEngine -Arguments @(
     "run", "--rm",
     "-e", "POC_RESULTS_DIR=/workspace/results",
     "-e", "POC_DATASET_NAME=$DatasetName",

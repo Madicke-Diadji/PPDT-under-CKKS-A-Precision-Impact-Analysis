@@ -64,6 +64,12 @@ The recommended way to run this POC is through the provided PowerShell entry poi
 .\run.ps1 -Dataset iris -SampleCount 20
 ```
 
+Docker users can use the same script shape by selecting the container engine explicitly:
+
+```powershell
+.\run.ps1 -Dataset iris -SampleCount 20 -Rebuild -ContainerEngine docker
+```
+
 `run.ps1` is the official workflow for this repository. It:
 
 - builds the container image when needed
@@ -71,12 +77,10 @@ The recommended way to run this POC is through the provided PowerShell entry poi
 - runs clear and HE inference
 - stores logs and CSV outputs in `results/`
 
-The repository is currently scripted around `Podman`, but Docker users can still use the same container logic in two ways:
+The script supports both `podman` and `docker` through `-ContainerEngine`.
 
-- simplest option: use `Podman`, since `run.ps1` already automates the full workflow
-- manual option: adapt the commands from [src/README.md](/abs/c:/Users/madicke-diadji.mbodj/POC_DT/My_Poc_all/src/README.md) by replacing `podman` with `docker` if your environment supports the same bind mounts and shell commands
-
-If you are using Docker instead of Podman, keep in mind that the ready-to-run automation in this repository targets `PowerShell + Podman`. Docker use is therefore best treated as a manual advanced setup rather than the default supported path.
+- default engine: `podman`
+- Docker example: `.\run.ps1 -Dataset iris -SampleCount 20 -Rebuild -ContainerEngine docker`
 
 Step-by-step Docker example:
 

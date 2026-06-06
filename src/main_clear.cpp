@@ -64,6 +64,11 @@ int chooseLayoutResolution(int nb_features) {
     return (nb_features <= 4) ? 4 : 2;
 }
 
+bool shouldUseNodeWiseNormalization(const std::string& tree_path) {
+    const fs::path path(tree_path);
+    return path.filename() == "model.json";
+}
+
 bool containsInsensitive(std::string value, const std::string& needle) {
     std::transform(value.begin(), value.end(), value.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
@@ -464,7 +469,11 @@ int main(int argc, char* argv[]) {
     engine.configureSoftGlobal(/*degree=*/8, /*window=*/soft_window);
 
     // Soft adaptatif : degré calculé automatiquement par nœud
-    engine.configureSoftAdaptive(/*window=*/soft_window, X_test);
+    if (shouldUseNodeWiseNormalization(tree_path)) {
+        engine.configureSoftAdaptive(/*window=*/soft_window, X_test);
+    } else {
+        engine.configureSoftAdaptive(/*window=*/soft_window);
+    }
     std::cout << "[main_clear] Soft window used: "
               << soft_window << "\n";
 
