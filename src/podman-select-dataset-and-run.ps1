@@ -5,8 +5,10 @@ $projectRoot = Split-Path $scriptDir -Parent
 $imageName = "poc-hbdt-seal"
 $containerSourceDir = "/workspace/src"
 $containerBuildDir = "/workspace/src/build-podman"
+$containerDtClearDir = "/workspace/DT_clear"
 $sealBuildJobs = 2
 $dataDir = Join-Path $projectRoot "data"
+$dtClearDir = Join-Path $projectRoot "DT_clear"
 $resultsDir = Join-Path $projectRoot "results"
 $logsDir = Join-Path $resultsDir "logs"
 $csvResultsPath = Join-Path $resultsDir "run_results.csv"
@@ -339,7 +341,8 @@ if ($choice -lt 1 -or $choice -gt $datasets.Count) {
 }
 
 $selected = $datasets[$choice - 1]
-$datasetPrefix = "data/$($selected.Name)"
+$plainTreeJson = Join-Path $dtClearDir ("plain_tree_{0}.json" -f $selected.Name)
+$plainTreeTxt = Join-Path $dtClearDir ("plain_tree_{0}.txt" -f $selected.Name)
 
 $header = (Get-Content $selected.TrainPath -TotalCount 1).Trim()
 $headerParts = $header -split ","
@@ -354,6 +357,14 @@ Write-Host ""
 Write-Host "Selected dataset: $($selected.Name)"
 Write-Host "  Features : $nbFeatures"
 Write-Host "  Classes  : $nbClasses"
+
+if (Test-Path $plainTreeJson) {
+  $treePath = "$containerDtClearDir/plain_tree_$($selected.Name).json"
+} elseif (Test-Path $plainTreeTxt) {
+  $treePath = "$containerDtClearDir/plain_tree_$($selected.Name).txt"
+} else {
+  throw "Plain hard tree not found for dataset '$($selected.Name)'. Expected $plainTreeJson or $plainTreeTxt"
+}
 
 $timestamp = Get-Date
 $timestampIso = $timestamp.ToString("s")
@@ -398,18 +409,8 @@ $logLines.Add("Features: $nbFeatures")
 $logLines.Add("Classes: $nbClasses")
 
 try {
-  $trainResult = Invoke-LoggedCommand -FilePath "python" -Arguments @(
-    (Join-Path $scriptDir "train_and_export.py"),
-    "--data-prefix", $datasetPrefix,
-    "--depth", "4",
-    "--output", (Join-Path $dataDir "tree.csv"),
-    "--json", (Join-Path $dataDir "tree.json")
-  )
-  $logLines.Add("===== train_and_export =====")
-  $trainResult.Lines | ForEach-Object { $logLines.Add($_) }
-  if ($trainResult.ExitCode -ne 0) {
-    throw "train_and_export.py failed (code $($trainResult.ExitCode))."
-  }
+  $logLines.Add("===== plain_tree =====")
+  $logLines.Add($treePath)
   $runData.train_status = "ok"
 
   $buildResult = Invoke-LoggedCommand -FilePath "podman" -Arguments @(
@@ -446,7 +447,7 @@ try {
     "-v", "${projectRoot}:/workspace",
     "-w", "/workspace",
     $imageName,
-    "bash", "-lc", "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:`$LD_LIBRARY_PATH && $containerBuildDir/poc_clear /workspace/data/tree.csv $nbFeatures $nbClasses"
+    "bash", "-lc", "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:`$LD_LIBRARY_PATH && $containerBuildDir/poc_clear $treePath $nbFeatures $nbClasses"
   )
   $logLines.Add("===== poc_clear results =====")
   $clearResult.Lines | ForEach-Object { $logLines.Add($_) }
@@ -463,7 +464,7 @@ try {
     "-v", "${projectRoot}:/workspace",
     "-w", "/workspace",
     $imageName,
-    "bash", "-lc", "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:`$LD_LIBRARY_PATH && $containerBuildDir/poc_he /workspace/data/tree.csv $nbFeatures $nbClasses"
+    "bash", "-lc", "export LD_LIBRARY_PATH=/opt/seal-install/lib:/opt/seal-install/lib64:`$LD_LIBRARY_PATH && $containerBuildDir/poc_he $treePath $nbFeatures $nbClasses"
   )
   $logLines.Add("===== poc_he results =====")
   $heResult.Lines | ForEach-Object { $logLines.Add($_) }

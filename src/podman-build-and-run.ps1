@@ -3,8 +3,9 @@ $ErrorActionPreference = "Stop"
 $imageName = "poc-hbdt-seal"
 $containerBuildDir = "/workspace/build-podman"
 $sealBuildJobs = 2
-$treePath = "/workspace/data/tree.csv"
 $dataDir = Join-Path $PWD "data"
+$dtClearDir = Join-Path (Split-Path $PWD -Parent) "DT_clear"
+$containerDtClearDir = "/workspace/DT_clear"
 
 $trainFiles = Get-ChildItem $dataDir -Filter "*_train.csv" | Sort-Object Name
 if (-not $trainFiles) {
@@ -46,7 +47,8 @@ if ($choice -lt 1 -or $choice -gt $datasets.Count) {
 }
 
 $selected = $datasets[$choice - 1]
-$datasetPrefix = "data/$($selected.Name)"
+$plainTreeJson = Join-Path $dtClearDir ("plain_tree_{0}.json" -f $selected.Name)
+$plainTreeTxt = Join-Path $dtClearDir ("plain_tree_{0}.txt" -f $selected.Name)
 
 $header = (Get-Content $selected.TrainPath -TotalCount 1).Trim()
 $headerParts = $header -split ","
@@ -62,7 +64,13 @@ Write-Host "Selected dataset: $($selected.Name)"
 Write-Host "  Features : $nbFeatures"
 Write-Host "  Classes  : $nbClasses"
 
-python .\train_and_export.py --data-prefix $datasetPrefix --depth 4 --output data/tree.csv --json data/tree.json
+if (Test-Path $plainTreeJson) {
+  $treePath = "$containerDtClearDir/plain_tree_$($selected.Name).json"
+} elseif (Test-Path $plainTreeTxt) {
+  $treePath = "$containerDtClearDir/plain_tree_$($selected.Name).txt"
+} else {
+  throw "Plain hard tree not found for dataset '$($selected.Name)'. Expected $plainTreeJson or $plainTreeTxt"
+}
 
 podman build --build-arg SEAL_BUILD_JOBS=$sealBuildJobs -t $imageName -f Containerfile .
 

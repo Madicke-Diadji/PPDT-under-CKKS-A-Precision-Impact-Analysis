@@ -5,7 +5,6 @@ $projectRoot = Split-Path $scriptDir -Parent
 $imageName = "poc-hbdt-seal"
 $containerSourceDir = "/workspace/src"
 $containerBuildDir = "/workspace/build-podman-seal"
-$containerTreePath = "/workspace/data/tree.csv"
 $containerDtClearDir = "/workspace/DT_clear"
 $localDataDir = Join-Path $scriptDir "data"
 $rootDataDir = Join-Path $projectRoot "data"
@@ -121,7 +120,6 @@ Write-Host "  Features : $nbFeatures"
 Write-Host "  Classes  : $nbClasses"
 Write-Host "  Folder   : $selectedDataDir"
 
-$treeArg = $containerTreePath
 if (Test-Path $plainTreeJson) {
   Write-Host "  Clear tree : $plainTreeJson"
   $treeArg = "$containerDtClearDir/plain_tree_$($selected.Name).json"
@@ -129,8 +127,7 @@ if (Test-Path $plainTreeJson) {
   Write-Host "  Clear tree : $plainTreeTxt"
   $treeArg = "$containerDtClearDir/plain_tree_$($selected.Name).txt"
 } else {
-  Write-Host "  Clear tree : no plain_tree found, generating one via train_and_export.py"
-  python (Join-Path $scriptDir "train_and_export.py") --data-prefix $hostDatasetPrefix --depth 4 --output (Join-Path $projectRoot "data/tree.csv") --json (Join-Path $projectRoot "data/tree.json")
+  throw "Plain hard tree not found for dataset '$($selected.Name)'. Expected $plainTreeJson or $plainTreeTxt"
 }
 
 podman run --rm `

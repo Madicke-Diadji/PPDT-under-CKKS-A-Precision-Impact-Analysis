@@ -9,10 +9,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$containerEngineExplicitlyRequested = $PSBoundParameters.ContainsKey("ContainerEngine")
 
 $repoRoot = (Resolve-Path $PSScriptRoot).Path
 $srcDir = Join-Path $repoRoot "src"
 $dataDir = Join-Path $repoRoot "data"
+$dtClearDir = Join-Path $repoRoot "DT_clear"
 $resultsDir = Join-Path $repoRoot "results"
 $logsDir = Join-Path $resultsDir "logs"
 $containerBuildDir = "/workspace/$BuildDir"
@@ -56,6 +58,121 @@ function Invoke-LoggedCommand {
     Lines = @($captured | ForEach-Object { "$_" })
     Text = (@($captured | ForEach-Object { "$_" }) -join [Environment]::NewLine)
   }
+}
+
+function Invoke-QuietCommand {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [Parameter(Mandatory = $true)][string[]]$Arguments
+  )
+
+  $output = @()
+  $previousErrorActionPreference = $ErrorActionPreference
+  $global:LASTEXITCODE = 0
+
+  try {
+    $ErrorActionPreference = "Continue"
+    $output = & $FilePath @Arguments 2>&1
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+
+  $lines = @($output | ForEach-Object { $_.ToString() })
+  return [PSCustomObject]@{
+    ExitCode = $LASTEXITCODE
+    Lines = $lines
+    Text = ($lines -join [Environment]::NewLine)
+  }
+}
+
+function Test-CommandAvailable {
+  param([Parameter(Mandatory = $true)][string]$Name)
+
+  return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
+function Test-ContainerEngineReady {
+  param([Parameter(Mandatory = $true)][string]$Engine)
+
+  if (-not (Test-CommandAvailable -Name $Engine)) {
+    return [PSCustomObject]@{
+      Ready = $false
+      Reason = "missing"
+      Details = "$Engine is not installed or not available in PATH."
+    }
+  }
+
+  $probeArguments = if ($Engine -eq "podman") {
+    @("info", "--format", "json")
+  } else {
+    @("info", "--format", "{{json .}}")
+  }
+
+  $probe = Invoke-QuietCommand -FilePath $Engine -Arguments $probeArguments
+  if ($probe.ExitCode -eq 0) {
+    return [PSCustomObject]@{
+      Ready = $true
+      Reason = "ok"
+      Details = $null
+    }
+  }
+
+  $details = $probe.Text.Trim()
+  if ([string]::IsNullOrWhiteSpace($details)) {
+    $details = "$Engine returned exit code $($probe.ExitCode) during readiness check."
+  }
+
+  $reason = "unavailable"
+  if ($Engine -eq "podman" -and (
+      $details -match "unable to connect to Podman socket" -or
+      $details -match "Please verify your connection to the Linux system" -or
+      $details -match "connection could be made because the target machine actively refused it"
+    )) {
+    $reason = "not_running"
+  }
+
+  return [PSCustomObject]@{
+    Ready = $false
+    Reason = $reason
+    Details = $details
+  }
+}
+
+function Resolve-ContainerEngine {
+  $selectedStatus = Test-ContainerEngineReady -Engine $ContainerEngine
+  if ($selectedStatus.Ready) {
+    return $ContainerEngine
+  }
+
+  if ((-not $containerEngineExplicitlyRequested) -and $ContainerEngine -eq "podman") {
+    $dockerStatus = Test-ContainerEngineReady -Engine "docker"
+    if ($dockerStatus.Ready) {
+      Write-Warning "Podman is unavailable on this machine. Falling back to Docker."
+      return "docker"
+    }
+  }
+
+  if ($selectedStatus.Reason -eq "not_running") {
+    throw @"
+The selected container engine '$ContainerEngine' is installed but not reachable.
+
+Start Podman and retry:
+  podman machine start
+
+If you prefer Docker and it is installed locally, rerun with:
+  .\run.ps1 -Dataset $selectedDataset -SampleCount $SampleCount -Rebuild -ContainerEngine docker
+
+Podman details:
+$($selectedStatus.Details)
+"@
+  }
+
+  throw @"
+The selected container engine '$ContainerEngine' is not ready.
+
+Details:
+$($selectedStatus.Details)
+"@
 }
 
 function Get-RegexValue {
@@ -323,17 +440,54 @@ function Get-StandardDatasetMetadata {
   Import-Csv $trainPath | ForEach-Object { $labels[$_.label] = $true }
   Import-Csv $testPath | ForEach-Object { $labels[$_.label] = $true }
 
+  $plainTreeJsonPath = Join-Path $dtClearDir "plain_tree_${Prefix}.json"
+  $plainTreeTxtPath = Join-Path $dtClearDir "plain_tree_${Prefix}.txt"
+  $legacyGenericArtifacts = @(
+    (Join-Path $dataDir "tree.csv"),
+    (Join-Path $dataDir "tree.json"),
+    (Join-Path $dataDir "test_data.csv")
+  ) | Where-Object { Test-Path $_ }
+
+  $legacyDatasetSpecificArtifacts = @(
+    (Join-Path $dataDir "tree_${Prefix}.csv"),
+    (Join-Path $dataDir "tree_${Prefix}.json"),
+    (Join-Path $dataDir "test_data_${Prefix}.csv")
+  ) | Where-Object { Test-Path $_ }
+
+  if (Test-Path $plainTreeJsonPath) {
+    $localModelPath = $plainTreeJsonPath
+    $containerModelPath = "/workspace/DT_clear/plain_tree_${Prefix}.json"
+  } elseif (Test-Path $plainTreeTxtPath) {
+    $localModelPath = $plainTreeTxtPath
+    $containerModelPath = "/workspace/DT_clear/plain_tree_${Prefix}.txt"
+  } else {
+    throw "Plain hard tree not found for standard dataset '$Prefix'. Expected $plainTreeJsonPath or $plainTreeTxtPath"
+  }
+
   Write-Host ""
   Write-Host "Standard dataset detected:"
   Write-Host "  Training CSV        : $trainPath"
   Write-Host "  Test CSV            : $testPath"
-  Write-Host "  A fresh tree export will be generated for this dataset."
+  Write-Host "  Plain hard tree     : $localModelPath"
+  if ($legacyGenericArtifacts.Count -gt 0) {
+    Write-Warning "Legacy generic artifacts are present in data/. They are ignored for standard datasets."
+    foreach ($legacyPath in $legacyGenericArtifacts) {
+      Write-Host "  Legacy artifact     : $legacyPath"
+    }
+  }
+  if ($legacyDatasetSpecificArtifacts.Count -gt 0) {
+    Write-Warning "Legacy exported standard-dataset artifacts are present in data/. They are ignored in favor of DT_clear."
+    foreach ($legacyPath in $legacyDatasetSpecificArtifacts) {
+      Write-Host "  Ignored artifact    : $legacyPath"
+    }
+  }
 
   return [PSCustomObject]@{
     Features = $featureCount
     Classes = $labels.Keys.Count
-    ModelPath = "/workspace/data/tree.csv"
-    LocalPrefix = "data/$Prefix"
+    ModelPath = $containerModelPath
+    LocalPrefix = $null
+    LocalModelPath = $localModelPath
   }
 }
 
@@ -386,6 +540,7 @@ function Get-DatasetExecutionPlan {
     Classes = $meta.Classes
     ModelPath = $meta.ModelPath
     LocalPrefix = $meta.LocalPrefix
+    LocalModelPath = $meta.LocalModelPath
   }
 }
 
@@ -426,26 +581,6 @@ function Ensure-Binaries {
 
   if ($compileResult.ExitCode -ne 0) {
     throw "CMake/container compilation failed with $ContainerEngine (code $($compileResult.ExitCode))."
-  }
-}
-
-function Train-StandardDataset {
-  param(
-    [Parameter(Mandatory = $true)][string]$LocalPrefix
-  )
-
-  Write-Host ""
-  Write-Host "Entrainement et export de l'arbre..."
-  $trainResult = Invoke-LoggedCommand -FilePath "python" -Arguments @(
-    (Join-Path $srcDir "train_and_export.py"),
-    "--data-prefix", $LocalPrefix,
-    "--depth", "4",
-    "--output", (Join-Path $dataDir "tree.csv"),
-    "--json", (Join-Path $dataDir "tree.json")
-  )
-
-  if ($trainResult.ExitCode -ne 0) {
-    throw "train_and_export.py failed (code $($trainResult.ExitCode))."
   }
 }
 
@@ -711,6 +846,7 @@ he_predictions_file: $heDetailsFile
 }
 
 $selectedDataset = Select-DatasetName -RequestedDataset $Dataset
+$ContainerEngine = Resolve-ContainerEngine
 $plan = Get-DatasetExecutionPlan -Name $selectedDataset
 
 Write-Host ""
@@ -724,8 +860,9 @@ Ensure-PodmanImage
 Ensure-Binaries
 Ensure-ResultsDirectories
 
-if ($plan.Type -eq "standard" -and $plan.LocalPrefix) {
-  Train-StandardDataset -LocalPrefix $plan.LocalPrefix
+if ($plan.Type -eq "standard") {
+  Write-Host ""
+  Write-Host "Using DT_clear plain hard tree for dataset '$($plan.Name)': $($plan.LocalModelPath)"
 }
 
 $runTimestamp = Get-Date

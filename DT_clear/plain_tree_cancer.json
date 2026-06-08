@@ -1,13 +1,13 @@
 {
   "tree_height": 4,
   "labels_count": 2,
-  "features_count": 2,
+  "features_count": 30,
   "nodes": [
     {
       "index": 0,
       "type": "node",
       "feature": 27,
-      "theta": -6.73219e-13,
+      "theta": -3.44964e-12,
       "left": 1,
       "right": 2
     },
@@ -15,7 +15,7 @@
       "index": 1,
       "type": "node",
       "feature": 19,
-      "theta": 1.56081e-12,
+      "theta": -4.30671e-12,
       "left": 3,
       "right": 4
     },
@@ -23,7 +23,7 @@
       "index": 2,
       "type": "node",
       "feature": 26,
-      "theta": 5.484e-12,
+      "theta": -3.55885e-12,
       "left": 5,
       "right": 6
     },
@@ -31,7 +31,7 @@
       "index": 3,
       "type": "node",
       "feature": 26,
-      "theta": 9.90759e-14,
+      "theta": 2.79724e-12,
       "left": 7,
       "right": 8
     },
@@ -39,14 +39,14 @@
       "index": 4,
       "type": "node",
       "feature": 22,
-      "theta": 2.11298e-13,
+      "theta": -4.6822e-12,
       "left": 9,
       "right": 10
     },
     {
       "index": 5,
       "type": "node",
-      "feature": 6,
+      "feature": 7,
       "theta": -0.5,
       "left": 11,
       "right": 12
@@ -54,24 +54,24 @@
     {
       "index": 6,
       "type": "node",
-      "feature": 19,
-      "theta": -1.61858e-13,
+      "feature": 20,
+      "theta": 6.44114e-12,
       "left": 13,
       "right": 14
     },
     {
       "index": 7,
       "type": "node",
-      "feature": 20,
-      "theta": -2.82586e-14,
+      "feature": 19,
+      "theta": -5.34815e-12,
       "left": 15,
       "right": 16
     },
     {
       "index": 8,
       "type": "node",
-      "feature": 7,
-      "theta": 2.09048e-12,
+      "feature": 6,
+      "theta": 1.43692e-13,
       "left": 17,
       "right": 18
     },
@@ -95,7 +95,7 @@
       "index": 11,
       "type": "node",
       "feature": 19,
-      "theta": -4.15229e-12,
+      "theta": 7.60696e-13,
       "left": 23,
       "right": 24
     },
@@ -103,7 +103,7 @@
       "index": 12,
       "type": "node",
       "feature": 19,
-      "theta": 8.63439e-13,
+      "theta": 1.33035e-12,
       "left": 25,
       "right": 26
     },
@@ -111,7 +111,7 @@
       "index": 13,
       "type": "node",
       "feature": 27,
-      "theta": 5.07639e-13,
+      "theta": -8.22471e-13,
       "left": 27,
       "right": 28
     },
@@ -176,7 +176,7 @@
       "type": "leaf",
       "values": [
         0.0102416,
-        -0.000311187
+        -0.000311186
       ]
     },
     {

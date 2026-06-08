@@ -70,8 +70,8 @@ Notes:
 
 - `podman` is the default container engine
 - Docker is enabled through `-ContainerEngine docker`
-- `-Rebuild` is recommended on a new machine to avoid stale binaries or stale exported trees
-- for standard datasets (`iris`, `cancer`, `wine`), the script regenerates the exported tree before inference
+- `-Rebuild` is recommended on a new machine to avoid stale binaries
+- for standard datasets (`iris`, `cancer`, `wine`), `run.ps1` now uses the plain hard trees from `DT_clear/plain_tree_<dataset>.json`
 
 `run.ps1`:
 
@@ -101,9 +101,10 @@ For a standard run, `run.ps1`:
 2. prepares the result directories
 3. builds the Podman image if needed
 4. compiles the clear and HE binaries in the container
-5. runs `poc_clear`
-6. runs `poc_he`
-7. parses the output and stores structured results
+5. loads the plain hard tree from `DT_clear/` for standard datasets or the dataset model for special datasets
+6. runs `poc_clear`
+7. runs `poc_he`
+8. parses the output and stores structured results
 
 ## Expected Console Output
 

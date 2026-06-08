@@ -1,7 +1,7 @@
 {
   "tree_height": 4,
   "labels_count": 3,
-  "features_count": 3,
+  "features_count": 4,
   "nodes": [
     {
       "index": 0,
@@ -14,8 +14,8 @@
     {
       "index": 1,
       "type": "node",
-      "feature": 2,
-      "theta": 5.83053e-12,
+      "feature": 1,
+      "theta": 1.15542e-12,
       "left": 3,
       "right": 4
     },
@@ -47,7 +47,7 @@
       "index": 5,
       "type": "node",
       "feature": 2,
-      "theta": 1.51576e-12,
+      "theta": -9.09881e-12,
       "left": 11,
       "right": 12
     },
@@ -70,7 +70,7 @@
     {
       "index": 8,
       "type": "node",
-      "feature": 1,
+      "feature": 0,
       "theta": -0.5,
       "left": 17,
       "right": 18
@@ -102,15 +102,15 @@
     {
       "index": 12,
       "type": "node",
-      "feature": 3,
-      "theta": -4.40123e-12,
+      "feature": 2,
+      "theta": 9.45932e-13,
       "left": 25,
       "right": 26
     },
     {
       "index": 13,
       "type": "node",
-      "feature": 3,
+      "feature": 2,
       "theta": 0.5,
       "left": 27,
       "right": 28
@@ -129,7 +129,7 @@
       "values": [
         3.88986,
         0.0144039,
-        6.22127e-06
+        6.22356e-06
       ]
     },
     {
@@ -138,7 +138,7 @@
       "values": [
         20.1133,
         0.231473,
-        0.000101874
+        0.000101876
       ]
     },
     {
@@ -174,7 +174,7 @@
       "values": [
         -0.0317039,
         0.0167977,
-        -0.000966623
+        -0.000966624
       ]
     },
     {
@@ -244,7 +244,7 @@
       "index": 28,
       "type": "leaf",
       "values": [
-        3.98467e-05,
+        3.98458e-05,
         0.45678,
         9.26012
       ]
@@ -253,7 +253,7 @@
       "index": 29,
       "type": "leaf",
       "values": [
-        2.56327e-06,
+        2.56204e-06,
         0.000559956,
         0.00606804
       ]
@@ -262,7 +262,7 @@
       "index": 30,
       "type": "leaf",
       "values": [
-        -7.20601e-06,
+        -7.20633e-06,
         0.299094,
         6.49968
       ]

@@ -1,7 +1,7 @@
 {
   "tree_height": 4,
   "labels_count": 3,
-  "features_count": 3,
+  "features_count": 13,
   "nodes": [
     {
       "index": 0,
@@ -15,7 +15,7 @@
       "index": 1,
       "type": "node",
       "feature": 9,
-      "theta": 1.99747e-12,
+      "theta": 2.04207e-12,
       "left": 3,
       "right": 4
     },
@@ -23,15 +23,15 @@
       "index": 2,
       "type": "node",
       "feature": 0,
-      "theta": 5.2313e-12,
+      "theta": 4.22281e-12,
       "left": 5,
       "right": 6
     },
     {
       "index": 3,
       "type": "node",
-      "feature": 10,
-      "theta": 1.32527e-12,
+      "feature": 9,
+      "theta": -1.13123e-12,
       "left": 7,
       "right": 8
     },
@@ -46,24 +46,24 @@
     {
       "index": 5,
       "type": "node",
-      "feature": 12,
-      "theta": 6.10482e-13,
+      "feature": 11,
+      "theta": 3.46526e-12,
       "left": 11,
       "right": 12
     },
     {
       "index": 6,
       "type": "node",
-      "feature": 12,
-      "theta": -3.38433e-13,
+      "feature": 11,
+      "theta": -3.5145e-12,
       "left": 13,
       "right": 14
     },
     {
       "index": 7,
       "type": "node",
-      "feature": 1,
-      "theta": 2.11895e-12,
+      "feature": 0,
+      "theta": 3.4871e-12,
       "left": 15,
       "right": 16
     },
@@ -94,8 +94,8 @@
     {
       "index": 11,
       "type": "node",
-      "feature": 9,
-      "theta": 1.19358e-12,
+      "feature": 8,
+      "theta": -2.54724e-12,
       "left": 23,
       "right": 24
     },
@@ -103,7 +103,7 @@
       "index": 12,
       "type": "node",
       "feature": 0,
-      "theta": -2.2443e-12,
+      "theta": -2.47218e-12,
       "left": 25,
       "right": 26
     },
@@ -145,9 +145,9 @@
       "index": 17,
       "type": "leaf",
       "values": [
-        -1.83206e-05,
+        -1.83182e-05,
         0.0199824,
-        -0.000549367
+        -0.000549364
       ]
     },
     {
@@ -163,25 +163,25 @@
       "index": 19,
       "type": "leaf",
       "values": [
-        2.2861e-07,
+        2.27082e-07,
         0.00764146,
-        1.59893e-05
+        1.59912e-05
       ]
     },
     {
       "index": 20,
       "type": "leaf",
       "values": [
-        5.45231e-07,
+        5.45667e-07,
         0.0522409,
-        -0.000510961
+        -0.000510959
       ]
     },
     {
       "index": 21,
       "type": "leaf",
       "values": [
-        5.45216e-07,
+        5.45798e-07,
         0.0522409,
         -0.000510959
       ]
@@ -255,7 +255,7 @@
       "values": [
         -0.00477131,
         -0.00100429,
-        0.000145801
+        0.000145799
       ]
     },
     {

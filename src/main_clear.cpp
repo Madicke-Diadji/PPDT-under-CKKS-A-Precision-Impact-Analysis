@@ -221,13 +221,14 @@ std::string defaultTestDataPath(const std::string& tree_path) {
             return "data/" + dataset + "_test.csv";
         }
     }
-    const std::string needle = "tree.csv";
-    const auto pos = path.rfind(needle);
-    if (pos != std::string::npos) {
-        path.replace(pos, needle.size(), "test_data.csv");
-        return path;
+    const fs::path filename = fs::path(tree_path).filename();
+    const std::string stem = filename.stem().string();
+    if (stem.rfind("tree_", 0) == 0) {
+        const std::string dataset = stem.substr(std::string("tree_").size());
+        return (parent / ("test_data_" + dataset + ".csv")).string();
     }
-    return "data/test_data.csv";
+    throw std::runtime_error(
+        "Unable to infer a dataset-specific test file from tree path: " + tree_path);
 }
 
 std::string sanitizeFileComponent(std::string value) {
@@ -270,8 +271,8 @@ std::string inferDatasetName(const std::string& tree_path) {
     if (path.filename() == "model.json") {
         return sanitizeFileComponent(path.parent_path().filename().string());
     }
-    if (path.filename() == "tree.csv" || path.filename() == "tree.json") {
-        return "tree";
+    if (stem.rfind("tree_", 0) == 0) {
+        return sanitizeFileComponent(stem.substr(std::string("tree_").size()));
     }
     return sanitizeFileComponent(stem);
 }

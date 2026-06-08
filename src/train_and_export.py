@@ -4,7 +4,7 @@ train_and_export.py - Entraine un arbre de decision "hard" (sklearn)
 et exporte sa structure au format CSV pour import dans le POC C++.
 
 Usage :
-    python3 train_and_export.py --dataset iris --depth 4 --output ../data/tree.csv
+    python3 train_and_export.py --dataset iris --depth 4 --output ../data/tree_iris.csv
 
 Export formats:
     CSV : node_id, is_leaf, feature, threshold, left_id, right_id, class_label, min_gap
@@ -16,6 +16,7 @@ import csv
 import json
 import os
 import urllib.request
+from pathlib import Path
 
 import numpy as np
 from sklearn.datasets import load_breast_cancer, make_classification
@@ -224,8 +225,8 @@ def main():
         help="Local prefix used to load data/<name>_train.csv and data/<name>_test.csv",
     )
     parser.add_argument("--depth", type=int, default=4, help="Maximum tree depth")
-    parser.add_argument("--output", default="../data/tree.csv", help="CSV output file")
-    parser.add_argument("--json", default="../data/tree.json", help="JSON output file")
+    parser.add_argument("--output", default="../data/tree_iris.csv", help="CSV output file")
+    parser.add_argument("--json", default="../data/tree_iris.json", help="JSON output file")
     args = parser.parse_args()
 
     if args.data_prefix:
@@ -255,7 +256,12 @@ def main():
     export_csv(clf, min_gaps, args.output, nb_classes)
     export_json(clf, min_gaps, args.json, nb_classes)
 
-    test_path = args.output.replace("tree.csv", "test_data.csv")
+    output_path = Path(args.output)
+    if output_path.name.startswith("tree_") and output_path.suffix == ".csv":
+        suffix = output_path.stem[len("tree_"):]
+        test_path = str(output_path.with_name(f"test_data_{suffix}.csv"))
+    else:
+        test_path = str(output_path.with_name(f"{output_path.stem}_test_data.csv"))
     os.makedirs(os.path.dirname(test_path) or ".", exist_ok=True)
     with open(test_path, "w", newline="") as f:
         writer = csv.writer(f)
