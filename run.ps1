@@ -37,6 +37,7 @@ function Invoke-LoggedCommand {
   )
 
   $captured = New-Object System.Collections.Generic.List[string]
+  $hideNextReasonLine = $false
   $previousErrorActionPreference = $ErrorActionPreference
   $global:LASTEXITCODE = 0
 
@@ -45,7 +46,21 @@ function Invoke-LoggedCommand {
     & $FilePath @Arguments 2>&1 | ForEach-Object {
       $line = $_.ToString()
       if ($line -ne "") {
-        Write-Host $line
+        $hideLine = $line -match "Soft global \(clear\)" -or
+                    $line -match "HE Soft global" -or
+                    $line -match "\[main_he\] Running HE soft global" -or
+                    $line -match "^Soft global inference\s*:" -or
+                    $line -match "^HE soft global inference\s*:"
+
+        if ($hideNextReasonLine -and $line -match "^\s+Reason\s*:") {
+          $hideLine = $true
+        }
+
+        if (-not $hideLine) {
+          Write-Host $line
+        }
+
+        $hideNextReasonLine = $line -match "HE Soft global\s*:\s*failed"
         [void]$captured.Add($line)
       }
     }
@@ -659,9 +674,7 @@ function Print-FinalSummary {
   Write-Host "================ Resume final ================"
   Write-Host "Dataset                    : $DatasetName"
   Write-Host "Hard inference (clear)     : $(if ($metrics.clear_hard_correct_count -and $metrics.clear_hard_accuracy_pct -ne $null) { "$($metrics.clear_hard_correct_count) - $($metrics.clear_hard_accuracy_pct)%" } else { 'n/a' })"
-  Write-Host "Soft global inference      : $(if ($metrics.clear_soft_global_correct_count -and $metrics.clear_soft_global_accuracy_pct -ne $null) { "$($metrics.clear_soft_global_correct_count) - $($metrics.clear_soft_global_accuracy_pct)%" } else { 'n/a' })"
   Write-Host "Soft adaptive inference    : $(if ($metrics.clear_soft_adaptive_correct_count -and $metrics.clear_soft_adaptive_accuracy_pct -ne $null) { "$($metrics.clear_soft_adaptive_correct_count) - $($metrics.clear_soft_adaptive_accuracy_pct)%" } else { 'n/a' })"
-  Write-Host "HE soft global inference   : $(if ($metrics.he_soft_global_correct_count -and $metrics.he_soft_global_accuracy_pct -ne $null) { "$($metrics.he_soft_global_correct_count) - $($metrics.he_soft_global_accuracy_pct)%" } elseif ($metrics.he_soft_global_status -eq 'failed') { "failed - $($metrics.he_soft_global_error)" } elseif ($metrics.he_output_detected) { 'unparsed output' } else { 'n/a (legacy output or rebuild missing)' })"
   Write-Host "HE soft adaptive inference : $(if ($metrics.he_soft_adaptive_correct_count -and $metrics.he_soft_adaptive_accuracy_pct -ne $null) { "$($metrics.he_soft_adaptive_correct_count) - $($metrics.he_soft_adaptive_accuracy_pct)%" } elseif ($metrics.he_soft_adaptive_status -eq 'failed') { "failed - $($metrics.he_soft_adaptive_error)" } elseif ($metrics.he_output_detected) { 'unparsed output' } else { 'n/a (legacy output or rebuild missing)' })"
 
   return $metrics

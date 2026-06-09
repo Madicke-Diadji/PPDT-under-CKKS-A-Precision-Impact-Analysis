@@ -7,8 +7,9 @@ The project evaluates a decision tree in several modes:
 - clear `hard` inference
 - clear `soft_global` inference
 - clear `soft_adaptive` inference
-- encrypted `HE Soft global` inference
 - encrypted `HE Soft adaptive` inference
+
+For terminal readability, `run.ps1` hides `soft_global` lines from the live console output and from the final terminal summary. Those metrics are still captured in logs and CSV exports.
 
 The main entry point for reproducible runs is [`run.ps1`](/abs/c:/Users/madicke-diadji.mbodj/POC_DT/My_Poc_all/run.ps1).
 
@@ -113,15 +114,15 @@ You should see sections similar to:
 ```text
 ===== poc_clear results =====
 Hard (clear)             : correct/total - accuracy%
-Soft global (clear)      : correct/total - accuracy%
 Soft adaptive (clear)    : correct/total - accuracy%
 
 ===== poc_he results =====
-HE Soft global           : correct/total - accuracy%   ms/inf
 HE Soft adaptive         : correct/total - accuracy%   ms/inf
 ```
 
-The script also prints a final summary with the dataset name and parsed metrics.
+The `soft_global` results are intentionally not shown in the terminal output anymore.
+
+The script also prints a final summary with the dataset name and the visible parsed metrics.
 
 ## Generated Files
 
@@ -138,10 +139,12 @@ After each run, the script saves:
 
 The cumulative CSV includes, among other fields:
 
-- clear `hard`, `soft_global`, and `soft_adaptive` metrics
-- HE `soft_global` and `soft_adaptive` metrics
+- clear `hard`,  and `soft_adaptive` metrics
+- HE `soft_adaptive` metrics
 - average HE timing per inference
 - paths to the detailed log and prediction files
+
+The timestamped log and CSV files keep the `soft_global` metrics even though they are hidden from the terminal.
 
 ## Troubleshooting
 
@@ -171,5 +174,5 @@ If a dataset is reported as unknown:
 If someone lands on your GitHub page and wants the fastest path to a working run, this is the command to use first:
 
 ```powershell
-.\run.ps1 -Dataset iris -SampleCount 20 -Rebuild
+.\run.ps1 -Dataset cancer -SampleCount 32 -Rebuild
 ```

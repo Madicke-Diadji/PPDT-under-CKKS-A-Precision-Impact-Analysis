@@ -68,7 +68,9 @@ int chooseLayoutResolution(int nb_features) {
 
 bool shouldUseNodeWiseNormalization(const std::string& tree_path) {
     const fs::path path(tree_path);
-    return path.filename() == "model.json";
+    const std::string filename = path.filename().string();
+    return path.filename() == "model.json"
+        || filename.rfind("plain_tree_", 0) == 0;
 }
 
 bool containsInsensitive(std::string value, const std::string& needle) {
